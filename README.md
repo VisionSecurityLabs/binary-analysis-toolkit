@@ -46,6 +46,8 @@ uv run bat-analyzer suspicious.exe --decompile ghidra --json --report
 
 The tool prints a structured analysis to the terminal with a final **MALICIOUS / SUSPICIOUS / No strong indicators** verdict. Add `--json` to save a machine-readable report for SIEM ingestion. Add `--report` to generate a natural-language investigation report via a local LLM.
 
+> **Note:** This tool performs static analysis — it works best on **unpacked binaries**. If `upx` is installed, UPX-packed binaries are automatically unpacked before analysis. For other packers, unpack the binary manually first (e.g., with a sandbox dump) for best results.
+
 ---
 
 ## Why This Tool
@@ -79,7 +81,9 @@ This tool automates the tedious parts of static analysis: computing hashes for l
 | **IOC extraction** | 9 extractors for URLs, domains, credentials/tokens, user agents, file paths, registry keys, OAuth endpoints, UUIDs, and environment variables | Produces a list of actionable indicators you can feed into your SIEM, firewall, or threat hunting queries |
 | **YARA signature scanning** | Bundled rules + custom rule directories | Signature-based detection that complements the behavioral rules |
 | **capa integration** | FLARE capa capability detection with ATT&CK mapping | Identifies what the binary *can do* (e.g., "send HTTP request", "encrypt data") independent of signatures |
+| **UPX auto-unpacking** | Detects UPX-packed binaries and unpacks before analysis | Packed binaries hide their strings and imports — unpacking reveals the real payload for all downstream analysis stages |
 | **Decompilation** | Radare2 (`r2pipe`) pseudocode or Ghidra headless with intelligent filtering | Ghidra output is automatically scored and filtered to show only functions that contain suspicious logic, organized by attack category |
+| **LLM analyst report** | Sends analysis results to a local LLM (Ollama) for natural-language interpretation | Produces a structured investigation report with executive summary, MITRE mapping, and recommended actions |
 | **Threat classification** | Final verdict combining all analysis layers | A clear MALICIOUS / LIKELY MALICIOUS / SUSPICIOUS / No strong indicators assessment |
 
 ---
@@ -154,6 +158,7 @@ These are standalone programs installed outside of Python:
 
 | Tool | Purpose | Install |
 |------|---------|---------|
+| **UPX** | Auto-unpack UPX-packed binaries before analysis | `brew install upx` or [upx.github.io](https://upx.github.io) |
 | **Radare2** | Pseudocode decompilation of native functions | `brew install radare2` or [radare.org](https://rada.re) |
 | **Ghidra** | Advanced decompilation with intelligent function filtering | `brew install ghidra` or [ghidra-sre.org](https://ghidra-sre.org) |
 | **ilspycmd** | .NET IL decompilation to C# source | `dotnet tool install -g ilspycmd` |

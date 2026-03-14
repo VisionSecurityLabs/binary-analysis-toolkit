@@ -361,13 +361,22 @@ def analyze_strings(data: bytes,
     if wide_strings is None:
         wide_strings = extract_wide_strings(data, min_len=4)
 
+    # Deobfuscate before matching
+    from bat_analyzer.deobfuscate import deobfuscate_strings
+    deobfuscated_ascii = deobfuscate_strings(ascii_strings)
+    deobfuscated_wide = deobfuscate_strings(wide_strings)
+
     all_strings = [(off, s, "ascii") for off, s in ascii_strings]
     all_strings += [(off, s, "wide") for off, s in wide_strings]
+    all_strings += [(off, s, "decoded") for off, s in deobfuscated_ascii]
+    all_strings += [(off, s, "decoded") for off, s in deobfuscated_wide]
 
     findings = {}
 
     for offset, string, encoding in all_strings:
-        for pattern, category in SUSPICIOUS_STRING_PATTERNS:
+        for entry in SUSPICIOUS_STRING_PATTERNS:
+            pattern, category = entry[0], entry[1]
+            weight = entry[2] if len(entry) > 2 else 1
             for m in re.finditer(pattern, string, re.IGNORECASE):
                 match_str = m.group()
                 findings.setdefault(category, []).append({
@@ -375,6 +384,7 @@ def analyze_strings(data: bytes,
                     "offset": offset,
                     "encoding": encoding,
                     "full_string": string[:200],
+                    "weight": weight,
                 })
 
     # Deduplicate by value within each category
@@ -386,6 +396,15 @@ def analyze_strings(data: bytes,
                 seen.add(item["value"])
                 deduped.append(item)
         findings[cat] = deduped
+
+    # False positive suppression: remove categories that require other signals
+    requires_map = {}
+    for entry in SUSPICIOUS_STRING_PATTERNS:
+        if len(entry) > 3:
+            requires_map[entry[1]] = entry[3]
+    for cat, required_cats in requires_map.items():
+        if cat in findings and not any(findings.get(r) for r in required_cats):
+            del findings[cat]
 
     category_labels = {
         "url": "URLs",

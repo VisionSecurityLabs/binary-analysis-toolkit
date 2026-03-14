@@ -20,6 +20,7 @@ from bat_analyzer.integrations.capa_runner import run_capa_analysis
 from bat_analyzer.integrations.yara_runner import run_yara_scan
 from bat_analyzer.integrations.decompiler import run_decompilation
 from bat_analyzer.integrations.llm_report import generate_llm_report
+from bat_analyzer.integrations.unpacker import try_unpack_upx
 from bat_analyzer.pe_analysis import (
     analyze_hashes, analyze_pe_headers, analyze_sections, analyze_imports,
     analyze_exports, analyze_resources, analyze_version_info, analyze_tls,
@@ -29,15 +30,27 @@ from bat_analyzer.pe_analysis import (
 from bat_analyzer.integrations.dotnet_analyzer import run_dotnet_analysis
 
 
-def classify(behaviors: list[dict], capa_results: list[dict], yara_results: list[dict]):
-    """Print final verdict combining custom rules, capa capabilities, and YARA matches."""
+def classify(behaviors: list[dict], capa_results: list[dict], yara_results: list[dict],
+             string_findings: dict | None = None):
+    """Print final verdict using weighted scoring across all evidence layers."""
     heading("CLASSIFICATION")
 
-    counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
-    for b in behaviors:
-        counts[b.get("severity", "low")] += 1
+    # ── Weighted scoring ──
+    SEVERITY_WEIGHTS = {"critical": 10, "high": 5, "medium": 2, "low": 1}
+    score = 0
 
-    # Boost from capa ATT&CK-mapped offensive capabilities
+    # Behavioral rules
+    for b in behaviors:
+        score += SEVERITY_WEIGHTS.get(b.get("severity", "low"), 1)
+
+    # String finding weights
+    if string_findings:
+        for cat, items in string_findings.items():
+            if items:
+                best_weight = max(item.get("weight", 1) for item in items)
+                score += best_weight
+
+    # Capa offensive capabilities
     offensive_namespaces = {
         "anti-analysis", "collection", "impact", "persistence",
         "exploitation", "communication",
@@ -45,30 +58,26 @@ def classify(behaviors: list[dict], capa_results: list[dict], yara_results: list
     capa_offensive = [c for c in capa_results
                       if c.get("namespace", "").split("/")[0] in offensive_namespaces
                       or c.get("att&ck")]
-    if len(capa_offensive) >= 5:
-        counts["high"] += 1
-    elif len(capa_offensive) >= 3:
-        counts["medium"] += 1
+    score += len(capa_offensive) * 3
 
-    # Boost from YARA packer / anti-debug hits
+    # YARA matches
     yara_suspicious = [y for y in yara_results
                        if y["source"] in ("antidebug_antivm.yar", "packer.yar")]
-    if yara_suspicious:
-        counts["medium"] += 1
+    score += len(yara_suspicious) * 4
 
-    # Verdict
-    if counts["critical"] > 0:
-        danger("VERDICT: MALICIOUS — Critical indicators detected")
-    elif counts["high"] >= 2:
-        danger("VERDICT: LIKELY MALICIOUS — Multiple high-severity indicators")
-    elif counts["high"] >= 1:
-        warn("VERDICT: SUSPICIOUS — High-severity indicators present")
-    elif counts["medium"] >= 2:
-        warn("VERDICT: SUSPICIOUS — Multiple medium-severity indicators")
+    # ── Verdict thresholds ──
+    if score >= 50:
+        danger(f"VERDICT: MALICIOUS — Threat score {score}/100+")
+    elif score >= 30:
+        danger(f"VERDICT: LIKELY MALICIOUS — Threat score {score}")
+    elif score >= 15:
+        warn(f"VERDICT: SUSPICIOUS — Threat score {score}")
+    elif score >= 5:
+        warn(f"VERDICT: LOW CONFIDENCE — Threat score {score}")
     else:
-        info("VERDICT: No strong malicious indicators (may require dynamic analysis)")
+        info(f"VERDICT: No strong malicious indicators — Threat score {score}")
 
-    # Detail breakdown
+    # ── Detail breakdown ──
     if behaviors:
         subheading("Custom Rules")
         for b in behaviors:
@@ -122,6 +131,13 @@ def main():
         print(f"[!] Failed to parse PE: {e}")
         sys.exit(1)
 
+    # Try UPX unpacking — if successful, re-read and re-parse
+    unpacked_path = try_unpack_upx(filepath)
+    if unpacked_path:
+        with open(unpacked_path, "rb") as f:
+            data = f.read()
+        pe = pefile.PE(data=data)
+
     print(f"{C.BOLD}{C.MAGENTA}")
     print("╔══════════════════════════════════════════════════════════════════════╗")
     print("║                    PE BINARY STATIC ANALYZER                       ║")
@@ -171,7 +187,13 @@ def main():
 
     # External tool analysis
     results["capa"] = run_capa_analysis(filepath, rules_path=settings.capa_rules) if settings.run_capa else []
-    results["yara"] = run_yara_scan(data, extra_dirs=settings.yara_extra_dirs) if settings.run_yara else []
+    if settings.run_yara:
+        if getattr(args, "update_yara", False):
+            from bat_analyzer.integrations.yara_runner import download_community_rules
+            download_community_rules()
+        results["yara"] = run_yara_scan(data, extra_dirs=settings.yara_extra_dirs)
+    else:
+        results["yara"] = []
 
     # Decompilation (optional) — pass ctx so Ghidra filter adapts to this binary's IOCs
     if settings.run_decompile:
@@ -190,7 +212,7 @@ def main():
             results["llm_report"] = report_text
 
     # Final verdict
-    classify(behaviors, results["capa"], results["yara"])
+    classify(behaviors, results["capa"], results["yara"], results["strings"])
 
     if settings.save_json:
         results["strings"] = {

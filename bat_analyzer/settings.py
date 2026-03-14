@@ -83,6 +83,7 @@ def parse_args():
     parser.add_argument("--llm-model", type=str, help="LLM model name (default: llama3)")
     parser.add_argument("--llm-timeout", type=int, help="LLM request timeout in seconds (default: 300)")
     parser.add_argument("--debug", action="store_true", help="Save LLM prompt to file for inspection")
+    parser.add_argument("--update-yara", action="store_true", help="Download/update community YARA rule repos before scanning")
     return parser.parse_args()
 
 
