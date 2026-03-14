@@ -3,7 +3,7 @@
 import sys
 from pathlib import Path
 
-from pe_analyzer.output import heading, info, warn, detail
+from bat_analyzer.output import heading, info, warn, detail
 
 try:
     import yara

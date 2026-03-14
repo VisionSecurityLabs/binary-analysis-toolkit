@@ -1,4 +1,4 @@
-# PE Static Analyzer -- Analyst Guide
+# Binary Analysis Toolkit -- Analyst Guide
 
 This guide is written for CERT and SOC analysts who need to triage suspicious Windows executables quickly and accurately. It assumes you know what a PE file is and have basic familiarity with Windows, but does not assume expertise in reverse engineering or malware analysis.
 
@@ -28,7 +28,7 @@ When a suspicious PE file arrives -- from an email attachment, an endpoint alert
 ### Step 1: Run the basic analysis
 
 ```bash
-uv run pe-analyzer sample.exe --json
+uv run bat-analyzer sample.exe --json
 ```
 
 The `--json` flag saves a machine-readable report as `sample_analysis.json` next to the binary. You will use this later for SIEM ingestion and sharing with your team.
@@ -95,10 +95,10 @@ If the triage results warrant deeper investigation:
 
 ```bash
 # Decompile with Ghidra (filtered to suspicious functions only)
-uv run pe-analyzer sample.exe --decompile ghidra
+uv run bat-analyzer sample.exe --decompile ghidra
 
 # Or use both Radare2 and Ghidra
-uv run pe-analyzer sample.exe --decompile both
+uv run bat-analyzer sample.exe --decompile both
 ```
 
 The Ghidra integration does not dump all functions. It scores every function against the suspicious indicators already found in the binary and shows only the ones that matter, organized by attack category. See Section 4 for details.
@@ -1017,7 +1017,7 @@ For case management with TheHive:
 
 1. Create a new case for the suspicious PE.
 2. Attach the JSON report as an observable.
-3. Use Cortex analyzers to automatically enrich the hashes, URLs, and domains extracted by the PE analyzer.
+3. Use Cortex analyzers to automatically enrich the hashes, URLs, and domains extracted by BAT.
 4. The behavioral rule categories map directly to TheHive's TLP and PAP classification: critical-severity rules suggest TLP:RED and PAP:RED.
 
 ### Useful jq recipes for the JSON report

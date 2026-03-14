@@ -5,7 +5,7 @@ import logging
 import shutil
 from pathlib import Path
 
-from pe_analyzer.output import heading, subheading, info, warn, danger, detail
+from bat_analyzer.output import heading, subheading, info, warn, danger, detail
 
 try:
     import dnfile

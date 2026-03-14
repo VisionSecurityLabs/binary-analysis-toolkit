@@ -1,5 +1,5 @@
 [project]
-name = "pe-analyzer"
+name = "bat-analyzer"
 version = "0.1.0"
 description = "Static PE binary analyzer with behavioral rules, capa, YARA, and decompiler integration"
 requires-python = ">=3.10"
@@ -13,5 +13,9 @@ yara = ["yara-python"]
 decompile = ["r2pipe"]
 all = ["flare-capa", "yara-python", "r2pipe"]
 
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project.scripts]
-pe-analyzer = "pe_analyzer.__main__:main"
+bat-analyzer = "bat_analyzer.__main__:main"

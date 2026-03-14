@@ -1,8 +1,8 @@
 """Generic behavioral rules — fire on techniques, not on any single malware family.
 Grouped roughly by MITRE ATT&CK category."""
 
-from pe_analyzer.context import AnalysisContext
-from pe_analyzer.rules import Rule
+from bat_analyzer.context import AnalysisContext
+from bat_analyzer.rules import Rule
 
 
 def _check_version_mismatch(ctx: AnalysisContext) -> bool:

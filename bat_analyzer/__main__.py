@@ -1,4 +1,4 @@
-"""CLI entry point — python -m pe_analyzer <file> [--json]"""
+"""CLI entry point — python -m bat_analyzer <file> [--json]"""
 
 import os
 import sys
@@ -11,21 +11,22 @@ except ImportError:
     print("[!] pefile not installed. Run: uv add pefile")
     sys.exit(1)
 
-from pe_analyzer.settings import parse_args, build_settings
-from pe_analyzer.output import C, heading, subheading, info, warn, danger, detail
-from pe_analyzer.strings import extract_ascii_strings, extract_wide_strings
-from pe_analyzer.context import build_context
-from pe_analyzer.rules import run_behavioral_rules, run_ioc_extractors
-from pe_analyzer.integrations.capa_runner import run_capa_analysis
-from pe_analyzer.integrations.yara_runner import run_yara_scan
-from pe_analyzer.integrations.decompiler import run_decompilation
-from pe_analyzer.pe_analysis import (
+from bat_analyzer.settings import parse_args, build_settings
+from bat_analyzer.output import C, heading, subheading, info, warn, danger, detail
+from bat_analyzer.strings import extract_ascii_strings, extract_wide_strings
+from bat_analyzer.context import build_context
+from bat_analyzer.rules import run_behavioral_rules, run_ioc_extractors
+from bat_analyzer.integrations.capa_runner import run_capa_analysis
+from bat_analyzer.integrations.yara_runner import run_yara_scan
+from bat_analyzer.integrations.decompiler import run_decompilation
+from bat_analyzer.integrations.llm_report import generate_llm_report
+from bat_analyzer.pe_analysis import (
     analyze_hashes, analyze_pe_headers, analyze_sections, analyze_imports,
     analyze_exports, analyze_resources, analyze_version_info, analyze_tls,
     analyze_imphash, analyze_rich_header, analyze_overlay,
     analyze_strings, analyze_dynamic_apis, analyze_compiler,
 )
-from pe_analyzer.integrations.dotnet_analyzer import run_dotnet_analysis
+from bat_analyzer.integrations.dotnet_analyzer import run_dotnet_analysis
 
 
 def classify(behaviors: list[dict], capa_results: list[dict], yara_results: list[dict]):
@@ -175,6 +176,18 @@ def main():
     # Decompilation (optional) — pass ctx so Ghidra filter adapts to this binary's IOCs
     if settings.run_decompile:
         results["decompilation"] = run_decompilation(filepath, backend=settings.run_decompile, ctx=ctx)
+
+    # LLM-powered analyst report (optional)
+    if settings.run_report:
+        report_text = generate_llm_report(
+            results, filepath,
+            llm_url=settings.llm_url,
+            llm_model=settings.llm_model,
+            timeout=settings.llm_timeout,
+            debug=settings.debug,
+        )
+        if report_text:
+            results["llm_report"] = report_text
 
     # Final verdict
     classify(behaviors, results["capa"], results["yara"])

@@ -4,8 +4,8 @@ import logging
 from dataclasses import dataclass
 from typing import Callable
 
-from pe_analyzer.context import AnalysisContext
-from pe_analyzer.output import heading, subheading, info, warn, danger, detail
+from bat_analyzer.context import AnalysisContext
+from bat_analyzer.output import heading, subheading, info, warn, danger, detail
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +32,8 @@ class IOCExtractor:
 def run_behavioral_rules(ctx: AnalysisContext,
                          rules: list[Rule] | None = None) -> list[dict]:
     """Evaluate all rules against the context. Returns triggered findings."""
-    from pe_analyzer.rules.generic import GENERIC_RULES
-    from pe_analyzer.rules.specimen import SPECIMEN_RULES
+    from bat_analyzer.rules.generic import GENERIC_RULES
+    from bat_analyzer.rules.specimen import SPECIMEN_RULES
 
     heading("BEHAVIORAL ANALYSIS")
 
@@ -66,7 +66,7 @@ def run_behavioral_rules(ctx: AnalysisContext,
 def run_ioc_extractors(ctx: AnalysisContext,
                        extractors: list[IOCExtractor] | None = None) -> dict:
     """Run all IOC extractors, display results, return structured dict."""
-    from pe_analyzer.rules.ioc import IOC_EXTRACTORS
+    from bat_analyzer.rules.ioc import IOC_EXTRACTORS
 
     heading("INDICATORS OF COMPROMISE (IOCs)")
 

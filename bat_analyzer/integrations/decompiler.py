@@ -16,11 +16,11 @@ import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from pe_analyzer.output import heading, subheading, info, warn, danger, detail
-from pe_analyzer.config import SUSPICIOUS_IMPORTS
+from bat_analyzer.output import heading, subheading, info, warn, danger, detail
+from bat_analyzer.config import SUSPICIOUS_IMPORTS
 
 if TYPE_CHECKING:
-    from pe_analyzer.context import AnalysisContext
+    from bat_analyzer.context import AnalysisContext
 
 try:
     import r2pipe

@@ -1,6 +1,6 @@
 """IOC extractors — each pulls one category of indicators from the analysis context."""
 
-from pe_analyzer.rules import IOCExtractor
+from bat_analyzer.rules import IOCExtractor
 
 IOC_EXTRACTORS: list[IOCExtractor] = [
     IOCExtractor("urls", "URLs", "warn",

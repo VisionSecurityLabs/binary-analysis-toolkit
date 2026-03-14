@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pefile
 
-from pe_analyzer.config import SUSPICIOUS_IMPORTS, SUSPICIOUS_STRING_PATTERNS
-from pe_analyzer.output import C, heading, subheading, info, warn, danger, detail
-from pe_analyzer.strings import extract_ascii_strings, extract_wide_strings
+from bat_analyzer.config import SUSPICIOUS_IMPORTS, SUSPICIOUS_STRING_PATTERNS
+from bat_analyzer.output import C, heading, subheading, info, warn, danger, detail
+from bat_analyzer.strings import extract_ascii_strings, extract_wide_strings
 
 
 def analyze_hashes(filepath: Path, data: bytes) -> dict:

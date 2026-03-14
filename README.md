@@ -1,4 +1,4 @@
-# PE Binary Static Analyzer
+# Binary Analysis Toolkit (BAT)
 
 A command-line tool for automated static analysis of Windows PE (Portable Executable) files. It examines executables without running them, identifies malicious behavior patterns, extracts actionable indicators of compromise (IOCs), and classifies threats -- giving CERT and SOC analysts a fast, structured starting point for triage and investigation.
 
@@ -8,11 +8,12 @@ Written in Python. The only required dependency is `pefile`; all other integrati
 
 ## Table of Contents
 
+- [Quick Start](#quick-start)
 - [Why This Tool](#why-this-tool)
 - [Features at a Glance](#features-at-a-glance)
 - [Malware Family Coverage](#malware-family-coverage)
 - [Installation](#installation)
-- [Quick Start](#quick-start)
+- [Usage Examples](#usage-examples)
 - [CLI Reference](#cli-reference)
 - [Configuration File](#configuration-file)
 - [Understanding the Output](#understanding-the-output)
@@ -20,6 +21,30 @@ Written in Python. The only required dependency is `pefile`; all other integrati
 - [Architecture](#architecture)
 - [Contributing](#contributing)
 - [License](#license)
+
+---
+
+## Quick Start
+
+```bash
+# Install
+git clone <repo-url> && cd binary-analysis-toolkit
+uv sync
+
+# Analyze a binary
+uv run bat-analyzer suspicious.exe
+
+# With JSON report
+uv run bat-analyzer suspicious.exe --json
+
+# With LLM-powered analyst report (requires Ollama)
+uv run bat-analyzer suspicious.exe --report --llm-model qwen3.5
+
+# Full analysis: decompilation + all integrations
+uv run bat-analyzer suspicious.exe --decompile ghidra --json --report
+```
+
+The tool prints a structured analysis to the terminal with a final **MALICIOUS / SUSPICIOUS / No strong indicators** verdict. Add `--json` to save a machine-readable report for SIEM ingestion. Add `--report` to generate a natural-language investigation report via a local LLM.
 
 ---
 
@@ -99,7 +124,7 @@ MBR (Master Boot Record) overwrite via direct physical drive access, mass file d
 ```bash
 # Clone the repository
 git clone <repo-url>
-cd process
+cd binary-analysis-toolkit
 
 # Install with uv (recommended)
 uv sync
@@ -144,38 +169,38 @@ git clone --depth 1 https://github.com/mandiant/capa-rules.git /tmp/capa-rules
 
 ---
 
-## Quick Start
+## Usage Examples
 
 ```bash
 # Basic analysis — prints results to terminal
-uv run pe-analyzer suspicious.exe
+uv run bat-analyzer suspicious.exe
 
 # Save a structured JSON report alongside the binary
-uv run pe-analyzer suspicious.exe --json
+uv run bat-analyzer suspicious.exe --json
 
 # Decompile with Radare2
-uv run pe-analyzer suspicious.exe --decompile r2
+uv run bat-analyzer suspicious.exe --decompile r2
 
 # Decompile with Ghidra (filtered to suspicious functions only)
-uv run pe-analyzer suspicious.exe --decompile ghidra
+uv run bat-analyzer suspicious.exe --decompile ghidra
 
 # Decompile with both backends
-uv run pe-analyzer suspicious.exe --decompile both
+uv run bat-analyzer suspicious.exe --decompile both
 
 # Skip optional integrations if they are slow or not needed
-uv run pe-analyzer suspicious.exe --no-capa --no-yara
+uv run bat-analyzer suspicious.exe --no-capa --no-yara
 
 # Use custom YARA rules in addition to bundled ones
-uv run pe-analyzer suspicious.exe --yara-rules /path/to/rules
+uv run bat-analyzer suspicious.exe --yara-rules /path/to/rules
 
 # Use a specific capa rules directory
-uv run pe-analyzer suspicious.exe --capa-rules /opt/capa-rules
+uv run bat-analyzer suspicious.exe --capa-rules /opt/capa-rules
 
 # Minimal output — only verdict and critical findings
-uv run pe-analyzer suspicious.exe --quiet
+uv run bat-analyzer suspicious.exe --quiet
 
 # Pipe-friendly output without ANSI color codes
-uv run pe-analyzer suspicious.exe --no-color
+uv run bat-analyzer suspicious.exe --no-color
 ```
 
 ---
@@ -183,7 +208,7 @@ uv run pe-analyzer suspicious.exe --no-color
 ## CLI Reference
 
 ```
-pe-analyzer [-h] [--json] [--decompile {r2,ghidra,both}]
+bat-analyzer [-h] [--json] [--decompile {r2,ghidra,both}]
             [--no-capa] [--no-yara] [--no-color] [--quiet]
             [--config CONFIG] [--capa-rules CAPA_RULES]
             [--yara-rules YARA_RULES [YARA_RULES ...]]
@@ -210,10 +235,10 @@ pe-analyzer [-h] [--json] [--decompile {r2,ghidra,both}]
 For settings you use repeatedly, create a TOML configuration file instead of passing flags every time. The tool looks for configuration in this order:
 
 1. Path passed via `--config`
-2. `pe_analyzer.toml` in the current directory
-3. `~/.config/pe_analyzer/config.toml`
+2. `bat_analyzer.toml` in the current directory
+3. `~/.config/bat_analyzer/config.toml`
 
-An example configuration file (`pe_analyzer.toml.example`) is included in the repository:
+An example configuration file (`bat_analyzer.toml.example`) is included in the repository:
 
 ```toml
 [paths]
@@ -405,7 +430,7 @@ Steps 1-13 gather raw data. Step 14 builds an `AnalysisContext` that aggregates 
 
 ### Adding Behavioral Rules
 
-Behavioral rules live in `pe_analyzer/rules/generic.py`. Each rule is a `Rule` object with a name, ATT&CK category, severity level, description, and a check function that receives an `AnalysisContext`:
+Behavioral rules live in `bat_analyzer/rules/generic.py`. Each rule is a `Rule` object with a name, ATT&CK category, severity level, description, and a check function that receives an `AnalysisContext`:
 
 ```python
 Rule("my_new_rule", "category", "high",
@@ -422,15 +447,15 @@ The `AnalysisContext` provides these convenience methods:
 
 ### Adding String Patterns
 
-String patterns are defined in `pe_analyzer/config.py` in the `SUSPICIOUS_STRING_PATTERNS` list. Each entry is a tuple of `(regex_pattern, category_name)`. The category name is what behavioral rules reference via `ctx.has_finding("category_name")`.
+String patterns are defined in `bat_analyzer/config.py` in the `SUSPICIOUS_STRING_PATTERNS` list. Each entry is a tuple of `(regex_pattern, category_name)`. The category name is what behavioral rules reference via `ctx.has_finding("category_name")`.
 
 ### Adding YARA Rules
 
-Place `.yar` or `.yara` files in `pe_analyzer/yara_rules/` for bundled rules, or point `--yara-rules` or the config file's `yara_extra_dirs` at your custom rule directories.
+Place `.yar` or `.yara` files in `bat_analyzer/yara_rules/` for bundled rules, or point `--yara-rules` or the config file's `yara_extra_dirs` at your custom rule directories.
 
 ### Adding IOC Extractors
 
-IOC extractors are defined in `pe_analyzer/rules/ioc.py`. Each extractor pulls a specific indicator type from the analysis context and defines how it should be displayed.
+IOC extractors are defined in `bat_analyzer/rules/ioc.py`. Each extractor pulls a specific indicator type from the analysis context and defines how it should be displayed.
 
 ---
 

@@ -1,5 +1,5 @@
 # PE Analyzer Configuration
-# Copy to pe_analyzer.toml or ~/.config/pe_analyzer/config.toml
+# Copy to bat_analyzer.toml or ~/.config/bat_analyzer/config.toml
 
 [paths]
 capa_rules = "/tmp/capa-rules"
@@ -15,3 +15,8 @@ yara = true
 no_color = false
 quiet = false
 json = false
+
+[llm]
+# url = "http://localhost:11434"   # Ollama default
+# model = "llama3"                  # or any Ollama model: mistral, codellama, etc.
+# report = false                    # set true to always generate LLM reports

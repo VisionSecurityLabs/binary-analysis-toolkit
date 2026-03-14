@@ -16,8 +16,8 @@ except ImportError:
 
 
 DEFAULT_CONFIG_PATHS = [
-    Path("pe_analyzer.toml"),
-    Path.home() / ".config" / "pe_analyzer" / "config.toml",
+    Path("bat_analyzer.toml"),
+    Path.home() / ".config" / "bat_analyzer" / "config.toml",
 ]
 
 
@@ -38,6 +38,13 @@ class Settings:
     quiet: bool = False
     save_json: bool = False
 
+    # LLM report
+    llm_url: str = "http://localhost:11434"
+    llm_model: str = "llama3"
+    llm_timeout: int = 300
+    run_report: bool = False
+    debug: bool = False
+
 
 def load_config(config_path: Path | None = None) -> dict:
     """Load config from TOML file. Returns empty dict if not found or tomllib unavailable."""
@@ -54,8 +61,8 @@ def load_config(config_path: Path | None = None) -> dict:
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        prog="pe-analyzer",
-        description="PE Binary Static Analyzer — behavioral rules, capa, YARA, decompiler integration",
+        prog="bat-analyzer",
+        description="Binary Analysis Toolkit (BAT) — PE static analysis with behavioral rules, capa, YARA, and decompiler integration",
     )
     parser.add_argument("file", type=Path, help="PE binary to analyze")
     parser.add_argument("--json", action="store_true", help="Save JSON report alongside binary")
@@ -71,6 +78,11 @@ def parse_args():
     parser.add_argument("--config", type=Path, help="Path to config TOML file")
     parser.add_argument("--capa-rules", type=Path, help="Path to capa rules directory")
     parser.add_argument("--yara-rules", type=Path, nargs="+", help="Additional YARA rule directories")
+    parser.add_argument("--report", action="store_true", help="Generate LLM-powered analyst report (requires Ollama or compatible API)")
+    parser.add_argument("--llm-url", type=str, help="LLM API base URL (default: http://localhost:11434)")
+    parser.add_argument("--llm-model", type=str, help="LLM model name (default: llama3)")
+    parser.add_argument("--llm-timeout", type=int, help="LLM request timeout in seconds (default: 300)")
+    parser.add_argument("--debug", action="store_true", help="Save LLM prompt to file for inspection")
     return parser.parse_args()
 
 
@@ -81,6 +93,7 @@ def build_settings(args) -> Settings:
     paths_cfg = config.get("paths", {})
     output_cfg = config.get("output", {})
     features_cfg = config.get("features", {})
+    llm_cfg = config.get("llm", {})
 
     settings = Settings(
         # Paths — CLI overrides config
@@ -102,11 +115,18 @@ def build_settings(args) -> Settings:
         no_color=getattr(args, "no_color", False) or output_cfg.get("no_color", False),
         quiet=getattr(args, "quiet", False) or output_cfg.get("quiet", False),
         save_json=getattr(args, "json", False) or output_cfg.get("json", False),
+
+        # LLM report
+        llm_url=getattr(args, "llm_url", None) or llm_cfg.get("url", "http://localhost:11434"),
+        llm_model=getattr(args, "llm_model", None) or llm_cfg.get("model", "llama3"),
+        llm_timeout=getattr(args, "llm_timeout", None) or llm_cfg.get("timeout", 300),
+        run_report=getattr(args, "report", False) or llm_cfg.get("report", False),
+        debug=getattr(args, "debug", False),
     )
 
     # Apply no_color to output module
     if settings.no_color:
-        from pe_analyzer.output import C
+        from bat_analyzer.output import C
         C.RED = C.GREEN = C.YELLOW = C.BLUE = C.MAGENTA = C.CYAN = ""
         C.BOLD = C.RESET = ""
 

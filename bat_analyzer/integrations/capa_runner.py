@@ -5,7 +5,7 @@ import sys
 import logging
 from pathlib import Path
 
-from pe_analyzer.output import heading, subheading, info, warn, detail
+from bat_analyzer.output import heading, subheading, info, warn, detail
 
 try:
     import capa.rules

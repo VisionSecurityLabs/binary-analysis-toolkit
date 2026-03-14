@@ -3,7 +3,7 @@
 These are clearly separated from generic rules so analysts know when a finding
 is family-specific vs. technique-generic. Add new families as needed."""
 
-from pe_analyzer.rules import Rule
+from bat_analyzer.rules import Rule
 
 SPECIMEN_RULES: list[Rule] = [
     # ── GitHub dead-drop C2 ──
