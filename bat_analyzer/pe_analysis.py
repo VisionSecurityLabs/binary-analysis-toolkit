@@ -12,6 +12,14 @@ from bat_analyzer.config import SUSPICIOUS_IMPORTS, SUSPICIOUS_STRING_PATTERNS
 from bat_analyzer.output import C, heading, subheading, info, warn, danger, detail
 from bat_analyzer.strings import extract_ascii_strings, extract_wide_strings
 
+import re as _re
+
+# Pre-compile string patterns for performance
+_COMPILED_PATTERNS = [
+    (_re.compile(p.regex, _re.IGNORECASE), p)
+    for p in SUSPICIOUS_STRING_PATTERNS
+]
+
 
 def analyze_hashes(filepath: Path, data: bytes) -> dict:
     heading("FILE HASHES")
@@ -374,17 +382,15 @@ def analyze_strings(data: bytes,
     findings = {}
 
     for offset, string, encoding in all_strings:
-        for entry in SUSPICIOUS_STRING_PATTERNS:
-            pattern, category = entry[0], entry[1]
-            weight = entry[2] if len(entry) > 2 else 1
-            for m in re.finditer(pattern, string, re.IGNORECASE):
+        for compiled_re, pat in _COMPILED_PATTERNS:
+            for m in compiled_re.finditer(string):
                 match_str = m.group()
-                findings.setdefault(category, []).append({
+                findings.setdefault(pat.category, []).append({
                     "value": match_str,
                     "offset": offset,
                     "encoding": encoding,
                     "full_string": string[:200],
-                    "weight": weight,
+                    "weight": pat.weight,
                 })
 
     # Deduplicate by value within each category
@@ -397,11 +403,22 @@ def analyze_strings(data: bytes,
                 deduped.append(item)
         findings[cat] = deduped
 
+    # Validate bitcoin addresses to reduce false positives
+    from bat_analyzer.validators import is_valid_bitcoin_address
+    if "bitcoin_address" in findings:
+        findings["bitcoin_address"] = [
+            item for item in findings["bitcoin_address"]
+            if is_valid_bitcoin_address(item["value"])
+        ]
+        if not findings["bitcoin_address"]:
+            del findings["bitcoin_address"]
+
     # False positive suppression: remove categories that require other signals
-    requires_map = {}
-    for entry in SUSPICIOUS_STRING_PATTERNS:
-        if len(entry) > 3:
-            requires_map[entry[1]] = entry[3]
+    requires_map = {
+        pat.category: pat.requires
+        for pat in SUSPICIOUS_STRING_PATTERNS
+        if pat.requires
+    }
     for cat, required_cats in requires_map.items():
         if cat in findings and not any(findings.get(r) for r in required_cats):
             del findings[cat]
