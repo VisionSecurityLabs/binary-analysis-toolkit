@@ -1,8 +1,8 @@
 # Binary Analysis Toolkit (BAT)
 
-A command-line tool for automated static analysis of Windows PE (Portable Executable) files. It examines executables without running them, identifies malicious behavior patterns, extracts actionable indicators of compromise (IOCs), and classifies threats -- giving CERT and SOC analysts a fast, structured starting point for triage and investigation.
+A command-line tool for automated static analysis of binary files. It currently supports Windows PE (Portable Executable) binaries with architecture ready for ELF and Mach-O formats. The tool examines executables without running them, identifies malicious behavior patterns, extracts actionable indicators of compromise (IOCs), and classifies threats -- giving CERT and SOC analysts a fast, structured starting point for triage and investigation.
 
-Written in Python. The only required dependency is `pefile`; all other integrations (capa, YARA, decompilers) are optional.
+Written in Python. The base dependencies are `pefile` and `yara-python`; capa, decompilers, and other integrations are optional.
 
 ---
 
@@ -31,20 +31,26 @@ Written in Python. The only required dependency is `pefile`; all other integrati
 git clone <repo-url> && cd binary-analysis-toolkit
 uv sync
 
-# Analyze a binary
-uv run bat-analyzer suspicious.exe
+# Analyze a binary (basic analysis only)
+uv run binanalysis suspicious.exe
+
+# With YARA community rules (auto-downloads on first use)
+uv run binanalysis suspicious.exe --yara
+
+# With capa capability detection (auto-downloads rules on first use)
+uv run binanalysis suspicious.exe --capa
 
 # With JSON report
-uv run bat-analyzer suspicious.exe --json
+uv run binanalysis suspicious.exe --json --yara --capa
 
 # With LLM-powered analyst report (requires Ollama)
-uv run bat-analyzer suspicious.exe --report --llm-model qwen3.5
+uv run binanalysis suspicious.exe --report --yara --llm-model qwen3.5
 
 # Full analysis: decompilation + all integrations
-uv run bat-analyzer suspicious.exe --decompile ghidra --json --report
+uv run binanalysis suspicious.exe --decompile ghidra --json --yara --capa --report
 ```
 
-The tool prints a structured analysis to the terminal with a final **MALICIOUS / SUSPICIOUS / No strong indicators** verdict. Add `--json` to save a machine-readable report for SIEM ingestion. Add `--report` to generate a natural-language investigation report via a local LLM.
+The tool prints a structured analysis to the terminal with a final **MALICIOUS / LIKELY MALICIOUS / SUSPICIOUS / No strong indicators** verdict. Add `--json` to save a machine-readable report for SIEM ingestion. Add `--report` to generate a natural-language investigation report via a local LLM. Use `--yara` and `--capa` flags to enable optional signature and capability detection (they auto-download rules on first use).
 
 > **Note:** This tool performs static analysis — it works best on **unpacked binaries**. If `upx` is installed, UPX-packed binaries are automatically unpacked before analysis. For other packers, unpack the binary manually first (e.g., with a sandbox dump) for best results.
 
@@ -136,14 +142,14 @@ uv sync
 
 ### Optional Integrations
 
-Each integration adds detection capabilities but is not required for the core analysis:
+Each integration adds detection capabilities:
 
 ```bash
 # capa — capability detection mapped to MITRE ATT&CK
 uv sync --extra capa
 
-# YARA — signature-based scanning
-uv sync --extra yara
+# .NET metadata extraction (for analyzing .NET binaries)
+uv sync --extra dotnet
 
 # Radare2 decompilation — pseudocode output
 uv sync --extra decompile
@@ -151,6 +157,8 @@ uv sync --extra decompile
 # Install everything
 uv sync --extra all
 ```
+
+**Note:** `yara-python` is now included in the base installation. Just use `--yara` flag to enable signature scanning.
 
 ### External Tools (Optional)
 
@@ -162,14 +170,22 @@ These are standalone programs installed outside of Python:
 | **Radare2** | Pseudocode decompilation of native functions | `brew install radare2` or [radare.org](https://rada.re) |
 | **Ghidra** | Advanced decompilation with intelligent function filtering | `brew install ghidra` or [ghidra-sre.org](https://ghidra-sre.org) |
 | **ilspycmd** | .NET IL decompilation to C# source | `dotnet tool install -g ilspycmd` |
-| **dnfile** | .NET metadata extraction (classes, methods, strings) | `pip install dnfile` |
 
-### capa Rules
+### capa and YARA Rules
 
-If you enable capa, you also need the rule set:
+Rules are downloaded automatically on first use. When you run:
+
+- `--capa` — capa rules are auto-downloaded to `~/.local/share/binanalysis/capa-rules`
+- `--yara` — 6 community YARA rule repositories are auto-cloned to `~/.local/share/binanalysis/yara-rules`
+
+To refresh rules later, use:
 
 ```bash
-git clone --depth 1 https://github.com/mandiant/capa-rules.git /tmp/capa-rules
+# Update capa rules
+uv run binanalysis file.exe --update-capa
+
+# Update community YARA rules
+uv run binanalysis file.exe --update-yara
 ```
 
 ---
@@ -178,34 +194,46 @@ git clone --depth 1 https://github.com/mandiant/capa-rules.git /tmp/capa-rules
 
 ```bash
 # Basic analysis — prints results to terminal
-uv run bat-analyzer suspicious.exe
+uv run binanalysis suspicious.exe
 
 # Save a structured JSON report alongside the binary
-uv run bat-analyzer suspicious.exe --json
+uv run binanalysis suspicious.exe --json
+
+# Enable YARA signature scanning
+uv run binanalysis suspicious.exe --yara
+
+# Enable capa capability detection
+uv run binanalysis suspicious.exe --capa
+
+# Both YARA and capa
+uv run binanalysis suspicious.exe --yara --capa
 
 # Decompile with Radare2
-uv run bat-analyzer suspicious.exe --decompile r2
+uv run binanalysis suspicious.exe --decompile r2
 
 # Decompile with Ghidra (filtered to suspicious functions only)
-uv run bat-analyzer suspicious.exe --decompile ghidra
+uv run binanalysis suspicious.exe --decompile ghidra
 
 # Decompile with both backends
-uv run bat-analyzer suspicious.exe --decompile both
+uv run binanalysis suspicious.exe --decompile both
 
-# Skip optional integrations if they are slow or not needed
-uv run bat-analyzer suspicious.exe --no-capa --no-yara
-
-# Use custom YARA rules in addition to bundled ones
-uv run bat-analyzer suspicious.exe --yara-rules /path/to/rules
+# Use custom YARA rules in addition to community rules
+uv run binanalysis suspicious.exe --yara --yara-rules /path/to/custom-rules
 
 # Use a specific capa rules directory
-uv run bat-analyzer suspicious.exe --capa-rules /opt/capa-rules
+uv run binanalysis suspicious.exe --capa --capa-rules /opt/capa-rules
+
+# Refresh community YARA rule repos before scanning
+uv run binanalysis suspicious.exe --update-yara --yara
+
+# Refresh capa rules before scanning
+uv run binanalysis suspicious.exe --update-capa --capa
 
 # Minimal output — only verdict and critical findings
-uv run bat-analyzer suspicious.exe --quiet
+uv run binanalysis suspicious.exe --quiet
 
 # Pipe-friendly output without ANSI color codes
-uv run bat-analyzer suspicious.exe --no-color
+uv run binanalysis suspicious.exe --no-color
 ```
 
 ---
@@ -213,25 +241,33 @@ uv run bat-analyzer suspicious.exe --no-color
 ## CLI Reference
 
 ```
-bat-analyzer [-h] [--json] [--decompile {r2,ghidra,both}]
-            [--no-capa] [--no-yara] [--no-color] [--quiet]
-            [--config CONFIG] [--capa-rules CAPA_RULES]
-            [--yara-rules YARA_RULES [YARA_RULES ...]]
+binanalysis [-h] [--json] [--decompile {r2,ghidra,both}]
+            [--capa] [--yara] [--update-capa] [--update-yara]
+            [--capa-rules CAPA_RULES] [--yara-rules YARA_RULES [YARA_RULES ...]]
+            [--report] [--llm-url URL] [--llm-model MODEL] [--llm-timeout SECONDS]
+            [--config CONFIG] [--no-color] [--quiet] [--debug]
             file
 ```
 
 | Argument | Description |
 |----------|-------------|
-| `file` | Path to the PE file to analyze (required, positional) |
+| `file` | Path to the binary file to analyze (required, positional) |
 | `--json` | Save a full JSON report as `<filename>_analysis.json` next to the binary |
 | `--decompile {r2,ghidra,both}` | Enable decompilation. `r2` uses Radare2 for quick pseudocode. `ghidra` uses Ghidra headless with intelligent filtering. `both` runs both backends. |
-| `--no-capa` | Skip capa capability analysis (faster if capa is installed but not needed) |
-| `--no-yara` | Skip YARA signature scanning |
+| `--capa` | Enable capa capability detection (auto-downloads rules on first use, ~100MB) |
+| `--yara` | Enable YARA signature scanning (auto-downloads 6 community rule repos on first use) |
+| `--update-capa` | Download/update capa rules before analysis |
+| `--update-yara` | Download/update community YARA rule repositories before analysis |
+| `--capa-rules` | Path to capa rules directory (overrides config file and default) |
+| `--yara-rules` | One or more additional YARA rule directories (added to community rules) |
+| `--report` | Generate LLM-powered analyst report (requires Ollama or compatible API) |
+| `--llm-url` | LLM API base URL (default: `http://localhost:11434`) |
+| `--llm-model` | LLM model name (default: `llama3`) |
+| `--llm-timeout` | LLM request timeout in seconds (default: 300) |
+| `--config` | Path to a TOML configuration file (see below) |
 | `--no-color` | Disable colored terminal output (useful for piping to files or other tools) |
 | `--quiet` | Show only the final verdict and critical findings |
-| `--config` | Path to a TOML configuration file (see below) |
-| `--capa-rules` | Path to capa rules directory (overrides config file and default `/tmp/capa-rules`) |
-| `--yara-rules` | One or more additional YARA rule directories to scan (added to any configured defaults) |
+| `--debug` | Save LLM prompt to file for inspection |
 
 ---
 
@@ -240,29 +276,76 @@ bat-analyzer [-h] [--json] [--decompile {r2,ghidra,both}]
 For settings you use repeatedly, create a TOML configuration file instead of passing flags every time. The tool looks for configuration in this order:
 
 1. Path passed via `--config`
-2. `bat_analyzer.toml` in the current directory
-3. `~/.config/bat_analyzer/config.toml`
+2. `binanalysis.toml` in the current directory
+3. `~/.config/binanalysis/config.toml`
 
-An example configuration file (`bat_analyzer.toml.example`) is included in the repository:
+A default configuration file is automatically created at `~/.config/binanalysis/config.toml` on first run. The configuration includes:
 
 ```toml
 [paths]
-capa_rules = "/opt/capa-rules"
-yara_extra_dirs = ["/opt/yara-rules", "/home/analyst/custom-rules"]
-ghidra_headless = "/opt/ghidra/support/analyzeHeadless"
+# Where capa rules are stored (auto-downloaded here if missing)
+capa_rules = "~/.local/share/binanalysis/capa-rules"
+# capa rules git repo (change to a mirror or fork if needed)
+capa_rules_repo = "https://github.com/mandiant/capa-rules.git"
+# Where community YARA rules are stored
+yara_community_dir = "~/.local/share/binanalysis/yara-rules"
+# Additional YARA rule directories scanned on every run
+# yara_extra_dirs = ["/path/to/rules"]
+# Path to Ghidra headless analyzer (auto-discovered if empty)
+# ghidra_headless = ""
+
+# Community YARA repos cloned/updated by --update-yara.
+# subdir = subdirectory within the repo that contains .yar files ("." = repo root).
+# Comment out or remove any repos you don't want.
+
+[yara_repos.signature-base]
+repo = "https://github.com/Neo23x0/signature-base.git"
+subdir = "yara"
+description = "Cobalt Strike, Go implants, webshells (Neo23x0)"
+
+[yara_repos.yara-rules]
+repo = "https://github.com/Yara-Rules/rules.git"
+subdir = "."
+description = "Broad malware families, packers, exploits"
+
+[yara_repos.gcti]
+repo = "https://github.com/chronicle/GCTI.git"
+subdir = "YARA"
+description = "APT-focused, high quality (Google)"
+
+[yara_repos.reversinglabs]
+repo = "https://github.com/reversinglabs/reversinglabs-yara-rules.git"
+subdir = "yara"
+description = "Large malware family signature set"
+
+[yara_repos.eset]
+repo = "https://github.com/eset/malware-ioc.git"
+subdir = "."
+description = "ESET research publications"
+
+[yara_repos.elastic]
+repo = "https://github.com/elastic/protections-artifacts.git"
+subdir = "yara/rules"
+description = "Elastic threat research"
 
 [features]
-capa = true
-yara = true
-decompile = ""  # "", "r2", "ghidra", or "both"
+capa = false  # opt-in via --capa flag (slow, downloads ~100MB rules on first use)
+yara = false  # opt-in via --yara flag (auto-downloads community rules on first use)
+# decompile = ""  # "", "r2", "ghidra", or "both"
 
 [output]
 no_color = false
 quiet = false
 json = false
+
+[llm]
+url = "http://localhost:11434"
+model = "llama3"
+timeout = 300
+report = false
 ```
 
-CLI flags always override config file settings. For example, `--no-capa` will disable capa even if the config file sets `capa = true`.
+CLI flags always override config file settings. For example, `--capa` will enable capa even if the config file sets `capa = false`. You can customize repository URLs in the `[yara_repos]` section (e.g., for mirrors or private forks).
 
 ---
 
@@ -401,7 +484,19 @@ The JSON format is suitable for ingestion into SIEM platforms (Splunk, Elastic),
 
 ## Architecture
 
-The analyzer runs a sequential pipeline, where each step builds on the results of previous steps:
+The analyzer uses a pluggable format-dispatch architecture. Binary format detection automatically routes to the appropriate `FormatHandler`:
+
+```
+Binary File
+    ↓
+Format Detection (PE / ELF / Mach-O architecture)
+    ↓
+Format-Specific Handler (PE today, ELF/Mach-O ready)
+    ↓
+Shared Pipeline (all formats)
+```
+
+For PE binaries, the analysis pipeline is:
 
 ```
 1.  Hash computation (MD5, SHA1, SHA256)
@@ -417,17 +512,18 @@ The analyzer runs a sequential pipeline, where each step builds on the results o
 11. Overlay / appended data analysis
 12. Compiler / packer detection
 13. .NET analysis (if applicable: metadata + IL decompilation)
-14. String extraction and pattern matching (115 patterns)
+14. String extraction and pattern matching (115+ patterns)
     +-- Dynamic API resolution detection
-    +-- Behavioral rule engine (105 rules)
+    +-- Generic behavioral rules (98 rules)
+    +-- PE-specific specimen rules (7 rules)
     +-- IOC extraction (9 extractors)
-    +-- capa capability detection (optional)
-    +-- YARA signature scanning (optional)
+    +-- capa capability detection (optional, --capa flag)
+    +-- YARA signature scanning (optional, --yara flag)
     +-- Decompilation with intelligent filtering (optional)
 15. Threat classification and verdict
 ```
 
-Steps 1-13 gather raw data. Step 14 builds an `AnalysisContext` that aggregates all findings into a single object, which is then passed to the behavioral rule engine, IOC extractors, and (if enabled) the Ghidra decompiler's intelligent filter. The filter uses the context to dynamically derive search keywords, so it adapts to whatever malware family is being analyzed without any hardcoded family-specific logic.
+Steps 1-13 gather format-specific data. Step 14 builds an `AnalysisContext` that aggregates all findings into a single object, which is then passed to the behavioral rule engine, IOC extractors, and (if enabled) the Ghidra decompiler's intelligent filter. The filter uses the context to dynamically derive search keywords, so it adapts to whatever malware family is being analyzed without any hardcoded family-specific logic.
 
 ---
 
@@ -435,13 +531,17 @@ Steps 1-13 gather raw data. Step 14 builds an `AnalysisContext` that aggregates 
 
 ### Adding Behavioral Rules
 
-Behavioral rules live in `bat_analyzer/rules/generic.py`. Each rule is a `Rule` object with a name, ATT&CK category, severity level, description, and a check function that receives an `AnalysisContext`:
+Behavioral rules are split into two categories:
+
+**Generic rules** (all binary types) — Located in `binanalysis/formats/pe/rules/generic.py`:
 
 ```python
 Rule("my_new_rule", "category", "high",
      "Description of what this detects",
      lambda ctx: ctx.has_import("SomeAPI") and ctx.has_finding("some_string_category"))
 ```
+
+**Specimen-specific rules** (PE family detection) — Located in `binanalysis/formats/pe/rules/specimen.py` for PE-specific malware family detection.
 
 The `AnalysisContext` provides these convenience methods:
 - `ctx.has_import("APIName")` -- checks if any imported function matches
@@ -452,15 +552,43 @@ The `AnalysisContext` provides these convenience methods:
 
 ### Adding String Patterns
 
-String patterns are defined in `bat_analyzer/config.py` in the `SUSPICIOUS_STRING_PATTERNS` list. Each entry is a tuple of `(regex_pattern, category_name)`. The category name is what behavioral rules reference via `ctx.has_finding("category_name")`.
+String patterns are defined in `binanalysis/config.py` as `StringPattern` dataclass instances. Each pattern includes:
+
+```python
+StringPattern(pattern, category, score, requires=[...])
+```
+
+- `pattern`: regex pattern to match
+- `category`: name for the finding category
+- `score`: integer weight for severity scoring
+- `requires`: optional list of categories that must be present for this to activate
+
+Behavioral rules reference categories via `ctx.has_finding("category_name")`.
 
 ### Adding YARA Rules
 
-Place `.yar` or `.yara` files in `bat_analyzer/yara_rules/` for bundled rules, or point `--yara-rules` or the config file's `yara_extra_dirs` at your custom rule directories.
+Place `.yar` or `.yara` files in `binanalysis/yara_rules/` for bundled rules, or configure custom directories:
+
+- Via `--yara-rules` CLI flag
+- Via `yara_extra_dirs` in `~/.config/binanalysis/config.toml`
+- Community rules are auto-downloaded to `~/.local/share/binanalysis/yara-rules` when using `--yara`
 
 ### Adding IOC Extractors
 
-IOC extractors are defined in `bat_analyzer/rules/ioc.py`. Each extractor pulls a specific indicator type from the analysis context and defines how it should be displayed.
+IOC extractors are defined in `binanalysis/ioc.py` as `IOCExtractor` instances. Each extractor pulls a specific indicator type from the analysis context:
+
+```python
+IOCExtractor("key", "Display Name", "severity", lambda ctx: [...])
+```
+
+### Adding a New Binary Format
+
+The framework is ready for ELF and Mach-O support. To add a new format:
+
+1. Create `binanalysis/formats/<name>/` directory
+2. Implement a `FormatHandler` with `analyze(filepath) -> dict`
+3. Register it: `register_format(FormatHandler(...))`
+4. Add format-specific rules in `binanalysis/formats/<name>/rules/`
 
 ---
 
