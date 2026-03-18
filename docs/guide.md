@@ -28,10 +28,10 @@ When a suspicious PE file arrives -- from an email attachment, an endpoint alert
 ### Step 1: Run the basic analysis
 
 ```bash
-uv run bat-analyzer sample.exe --json
+uv run binanalysis sample.exe
 ```
 
-The `--json` flag saves a machine-readable report as `sample_analysis.json` next to the binary. You will use this later for SIEM ingestion and sharing with your team.
+JSON and HTML reports are automatically saved as `sample_analysis.json` and `sample_analysis.html` next to the binary. You will use these later for SIEM ingestion and sharing with your team.
 
 The terminal output is designed to be read top-to-bottom. Skim it once, then focus on the sections described below.
 
@@ -95,10 +95,10 @@ If the triage results warrant deeper investigation:
 
 ```bash
 # Decompile with Ghidra (filtered to suspicious functions only)
-uv run bat-analyzer sample.exe --decompile ghidra
+uv run binanalysis sample.exe --decompile ghidra
 
 # Or use both Radare2 and Ghidra
-uv run bat-analyzer sample.exe --decompile both
+uv run binanalysis sample.exe --decompile both
 ```
 
 The Ghidra integration does not dump all functions. It scores every function against the suspicious indicators already found in the binary and shows only the ones that matter, organized by attack category. See Section 4 for details.
@@ -892,7 +892,7 @@ Context always matters more than any single rule. Ask yourself:
 
 ## 10. Integration with Other Tools
 
-The analyzer's JSON output (`--json`) is designed for machine consumption. Here is how to integrate it with the tools in your SOC stack.
+The analyzer's JSON output is designed for machine consumption and is saved automatically on every run. Here is how to integrate it with the tools in your SOC stack.
 
 ### VirusTotal
 

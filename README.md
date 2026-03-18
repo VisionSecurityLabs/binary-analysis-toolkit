@@ -17,7 +17,7 @@ Written in Python. The base dependencies are `pefile` and `yara-python`; capa, d
 - [CLI Reference](#cli-reference)
 - [Configuration File](#configuration-file)
 - [Understanding the Output](#understanding-the-output)
-- [JSON Report](#json-report)
+- [Reports](#reports)
 - [Architecture](#architecture)
 - [Contributing](#contributing)
 - [License](#license)
@@ -40,17 +40,14 @@ uv run binanalysis suspicious.exe --yara
 # With capa capability detection (auto-downloads rules on first use)
 uv run binanalysis suspicious.exe --capa
 
-# With JSON report
-uv run binanalysis suspicious.exe --json --yara --capa
-
 # With LLM-powered analyst report (requires Ollama)
-uv run binanalysis suspicious.exe --report --yara --llm-model qwen3.5
+uv run binanalysis suspicious.exe --llm-report --yara --llm-model qwen3.5
 
 # Full analysis: decompilation + all integrations
-uv run binanalysis suspicious.exe --decompile ghidra --json --yara --capa --report
+uv run binanalysis suspicious.exe --decompile ghidra --yara --capa --llm-report
 ```
 
-The tool prints a structured analysis to the terminal with a final **MALICIOUS / LIKELY MALICIOUS / SUSPICIOUS / No strong indicators** verdict. Add `--json` to save a machine-readable report for SIEM ingestion. Add `--report` to generate a natural-language investigation report via a local LLM. Use `--yara` and `--capa` flags to enable optional signature and capability detection (they auto-download rules on first use).
+The tool prints a structured analysis to the terminal with a final **MALICIOUS / LIKELY MALICIOUS / SUSPICIOUS / No strong indicators** verdict. JSON and HTML reports are always saved automatically as `<filename>_analysis.json` and `<filename>_analysis.html` alongside the binary. Add `--llm-report` to generate a natural-language investigation report via a local LLM. Use `--yara` and `--capa` flags to enable optional signature and capability detection (they auto-download rules on first use).
 
 > **Note:** This tool performs static analysis — it works best on **unpacked binaries**. If `upx` is installed, UPX-packed binaries are automatically unpacked before analysis. For other packers, unpack the binary manually first (e.g., with a sandbox dump) for best results.
 
@@ -193,11 +190,8 @@ uv run binanalysis file.exe --update-yara
 ## Usage Examples
 
 ```bash
-# Basic analysis — prints results to terminal
+# Basic analysis — prints results to terminal, saves JSON + HTML reports automatically
 uv run binanalysis suspicious.exe
-
-# Save a structured JSON report alongside the binary
-uv run binanalysis suspicious.exe --json
 
 # Enable YARA signature scanning
 uv run binanalysis suspicious.exe --yara
@@ -228,12 +222,6 @@ uv run binanalysis suspicious.exe --update-yara --yara
 
 # Refresh capa rules before scanning
 uv run binanalysis suspicious.exe --update-capa --capa
-
-# Minimal output — only verdict and critical findings
-uv run binanalysis suspicious.exe --quiet
-
-# Pipe-friendly output without ANSI color codes
-uv run binanalysis suspicious.exe --no-color
 ```
 
 ---
@@ -241,18 +229,17 @@ uv run binanalysis suspicious.exe --no-color
 ## CLI Reference
 
 ```
-binanalysis [-h] [--json] [--decompile {r2,ghidra,both}]
+binanalysis [-h] [--decompile {r2,ghidra,both}]
             [--capa] [--yara] [--update-capa] [--update-yara]
             [--capa-rules CAPA_RULES] [--yara-rules YARA_RULES [YARA_RULES ...]]
-            [--report] [--llm-url URL] [--llm-model MODEL] [--llm-timeout SECONDS]
-            [--config CONFIG] [--no-color] [--quiet] [--debug]
+            [--llm-report] [--llm-url URL] [--llm-model MODEL] [--llm-timeout SECONDS]
+            [--config CONFIG] [--debug]
             file
 ```
 
 | Argument | Description |
 |----------|-------------|
 | `file` | Path to the binary file to analyze (required, positional) |
-| `--json` | Save a full JSON report as `<filename>_analysis.json` next to the binary |
 | `--decompile {r2,ghidra,both}` | Enable decompilation. `r2` uses Radare2 for quick pseudocode. `ghidra` uses Ghidra headless with intelligent filtering. `both` runs both backends. |
 | `--capa` | Enable capa capability detection (auto-downloads rules on first use, ~100MB) |
 | `--yara` | Enable YARA signature scanning (auto-downloads 6 community rule repos on first use) |
@@ -260,13 +247,11 @@ binanalysis [-h] [--json] [--decompile {r2,ghidra,both}]
 | `--update-yara` | Download/update community YARA rule repositories before analysis |
 | `--capa-rules` | Path to capa rules directory (overrides config file and default) |
 | `--yara-rules` | One or more additional YARA rule directories (added to community rules) |
-| `--report` | Generate LLM-powered analyst report (requires Ollama or compatible API) |
+| `--llm-report` | Generate LLM-powered analyst report (requires Ollama or compatible API) |
 | `--llm-url` | LLM API base URL (default: `http://localhost:11434`) |
 | `--llm-model` | LLM model name (default: `llama3`) |
 | `--llm-timeout` | LLM request timeout in seconds (default: 300) |
 | `--config` | Path to a YAML configuration file (see below) |
-| `--no-color` | Disable colored terminal output (useful for piping to files or other tools) |
-| `--quiet` | Show only the final verdict and critical findings |
 | `--debug` | Save LLM prompt to file for inspection |
 
 ---
@@ -332,11 +317,6 @@ features:
   capa: false   # opt-in via --capa flag (slow, downloads ~100MB rules on first use)
   yara: false   # opt-in via --yara flag (auto-downloads community rules on first use)
   # decompile: ""  # "", "r2", "ghidra", or "both"
-
-output:
-  no_color: false
-  quiet: false
-  json: false
 
 llm:
   url: http://localhost:11434
@@ -459,9 +439,9 @@ If you use `--decompile ghidra`, the tool does not simply dump thousands of deco
 
 ---
 
-## JSON Report
+## Reports
 
-When you pass `--json`, a complete structured report is saved as `<filename>_analysis.json` in the same directory as the analyzed binary.
+Every analysis automatically saves a complete structured report as `<filename>_analysis.json` and an HTML report as `<filename>_analysis.html` in the same directory as the analyzed binary.
 
 The JSON report contains every analysis result in machine-readable form: hashes, PE headers, sections, imports, exports, resources, version info, TLS data, overlay analysis, compiler detection, string findings, dynamic APIs, behavioral rule matches, IOCs, capa capabilities, and YARA matches.
 
