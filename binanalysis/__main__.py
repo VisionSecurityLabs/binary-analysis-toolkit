@@ -17,8 +17,8 @@ from binanalysis.integrations.llm_report import generate_llm_report
 # Import format backends to trigger registration
 import binanalysis.formats.pe  # noqa: F401
 
-from binanalysis.integrations.capa_runner import run_capa_analysis
-from binanalysis.integrations.yara_runner import run_yara_scan
+from binanalysis.integrations.capa_runner import run_capa_analysis, update_capa_rules
+from binanalysis.integrations.yara_runner import run_yara_scan, download_community_rules
 
 
 def classify(behaviors: list[dict], capa_results: list[dict], yara_results: list[dict]):
@@ -85,8 +85,16 @@ def generate_report(filepath: Path, all_results: dict):
 
 def main():
     args = parse_args()
-    filepath = args.file
     settings = build_settings(args)
+
+    if getattr(args, "update_capa", False):
+        update_capa_rules(rules_path=settings.capa_rules, repo=settings.capa_rules_repo)
+
+    if getattr(args, "update_yara", False):
+        download_community_rules(community_dir=settings.yara_community_dir,
+                                 repos=settings.yara_repos)
+
+    filepath = args.file
     save_json = settings.save_json
 
     if not filepath.exists():
@@ -146,12 +154,14 @@ def main():
 
     # Integrations
     if settings.run_capa:
-        capa_results = run_capa_analysis(filepath)
+        capa_results = run_capa_analysis(filepath, rules_path=settings.capa_rules)
     else:
         capa_results = []
 
     if settings.run_yara:
-        yara_results = run_yara_scan(data)
+        yara_results = run_yara_scan(data, extra_dirs=settings.yara_extra_dirs or None,
+                                     community_dir=settings.yara_community_dir,
+                                     repos=settings.yara_repos)
     else:
         yara_results = []
 

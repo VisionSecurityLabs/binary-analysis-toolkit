@@ -1,6 +1,7 @@
 """capa integration — capability detection with ATT&CK mapping."""
 
 import io
+import subprocess
 import sys
 import logging
 from pathlib import Path
@@ -15,7 +16,42 @@ try:
 except ImportError:
     HAS_CAPA = False
 
-DEFAULT_CAPA_RULES = Path("/tmp/capa-rules")
+from binanalysis.settings import _DEFAULT_CAPA_RULES
+DEFAULT_CAPA_RULES = _DEFAULT_CAPA_RULES
+
+_DEFAULT_CAPA_REPO = "https://github.com/mandiant/capa-rules.git"
+
+
+def update_capa_rules(rules_path: Path | None = None, repo: str | None = None) -> bool:
+    """Clone or pull capa rules. Returns True on success."""
+    import shutil
+    target = rules_path or DEFAULT_CAPA_RULES
+    url = repo or _DEFAULT_CAPA_REPO
+
+    if not shutil.which("git"):
+        warn("git not found in PATH — cannot download capa rules")
+        return False
+
+    if target.exists():
+        info(f"Updating capa rules at {target}...")
+        result = subprocess.run(
+            ["git", "-C", str(target), "pull", "--ff-only"],
+            capture_output=True, text=True, timeout=120,
+        )
+    else:
+        info(f"Downloading capa rules to {target}...")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        result = subprocess.run(
+            ["git", "clone", "--depth", "1", url, str(target)],
+            capture_output=True, text=True,
+        )
+
+    if result.returncode != 0:
+        warn(f"Failed: {result.stderr.strip()}")
+        return False
+
+    info("capa rules up to date")
+    return True
 
 
 def run_capa_analysis(filepath: Path, rules_path: Path | None = None) -> list[dict]:
@@ -27,9 +63,10 @@ def run_capa_analysis(filepath: Path, rules_path: Path | None = None) -> list[di
 
     rules_path = rules_path or DEFAULT_CAPA_RULES
     if not rules_path.exists():
-        warn(f"capa rules not found at {rules_path}")
-        info("Download: git clone --depth 1 https://github.com/mandiant/capa-rules.git /tmp/capa-rules")
-        return []
+        info(f"capa rules not found at {rules_path} — downloading now...")
+        if not update_capa_rules(rules_path):
+            info(f"Manual fix: git clone --depth 1 {_DEFAULT_CAPA_REPO} {rules_path}")
+            return []
 
     heading("CAPA CAPABILITY DETECTION")
 
@@ -53,7 +90,7 @@ def run_capa_analysis(filepath: Path, rules_path: Path | None = None) -> list[di
         logging.disable(logging.NOTSET)
 
     results = []
-    for rule_name, addresses in caps.matches.items():
+    for rule_name, _ in caps.matches.items():
         rule = ruleset.rules[rule_name]
         if rule.is_subscope_rule():
             continue

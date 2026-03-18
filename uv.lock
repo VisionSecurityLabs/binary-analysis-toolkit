@@ -35,13 +35,14 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "pefile" },
+    { name = "yara-python" },
 ]
 
 [package.optional-dependencies]
 all = [
+    { name = "dnfile" },
     { name = "flare-capa" },
     { name = "r2pipe" },
-    { name = "yara-python" },
 ]
 capa = [
     { name = "flare-capa" },
@@ -49,21 +50,22 @@ capa = [
 decompile = [
     { name = "r2pipe" },
 ]
-yara = [
-    { name = "yara-python" },
+dotnet = [
+    { name = "dnfile" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "dnfile", marker = "extra == 'all'" },
+    { name = "dnfile", marker = "extra == 'dotnet'" },
     { name = "flare-capa", marker = "extra == 'all'" },
     { name = "flare-capa", marker = "extra == 'capa'" },
     { name = "pefile" },
     { name = "r2pipe", marker = "extra == 'all'" },
     { name = "r2pipe", marker = "extra == 'decompile'" },
-    { name = "yara-python", marker = "extra == 'all'" },
-    { name = "yara-python", marker = "extra == 'yara'" },
+    { name = "yara-python" },
 ]
-provides-extras = ["capa", "yara", "decompile", "all"]
+provides-extras = ["capa", "dotnet", "decompile", "all"]
 
 [[package]]
 name = "cachetools"

@@ -20,17 +20,113 @@ DEFAULT_CONFIG_PATHS = [
     Path.home() / ".config" / "binanalysis" / "config.toml",
 ]
 
+_DEFAULT_CONFIG_CONTENT = """\
+# binanalysis configuration — edit to customize defaults
+# Generated on first run. All values here are overridable via CLI flags.
+
+[paths]
+# Where capa rules are stored (auto-downloaded here if missing)
+capa_rules = "{capa_rules}"
+# capa rules git repo (change to a mirror or fork if needed)
+capa_rules_repo = "https://github.com/mandiant/capa-rules.git"
+# Where community YARA rules are stored (fetched via --update-yara)
+yara_community_dir = "{yara_rules}"
+# Additional YARA rule directories scanned on every run (list of paths)
+# yara_extra_dirs = ["/path/to/rules"]
+# Path to Ghidra headless analyzer (auto-discovered if empty)
+# ghidra_headless = ""
+
+# Community YARA repos cloned/updated by --update-yara.
+# subdir = subdirectory within the repo that contains .yar files ("." = repo root).
+# Comment out or remove any repos you don't want.
+
+[yara_repos.signature-base]
+repo = "https://github.com/Neo23x0/signature-base.git"
+subdir = "yara"
+description = "Cobalt Strike, Go implants, webshells (Neo23x0)"
+
+[yara_repos.yara-rules]
+repo = "https://github.com/Yara-Rules/rules.git"
+subdir = "."
+description = "Broad malware families, packers, exploits"
+
+[yara_repos.gcti]
+repo = "https://github.com/chronicle/GCTI.git"
+subdir = "YARA"
+description = "APT-focused, high quality (Google)"
+
+[yara_repos.reversinglabs]
+repo = "https://github.com/reversinglabs/reversinglabs-yara-rules.git"
+subdir = "yara"
+description = "Large malware family signature set"
+
+[yara_repos.eset]
+repo = "https://github.com/eset/malware-ioc.git"
+subdir = "."
+description = "ESET research publications"
+
+[yara_repos.elastic]
+repo = "https://github.com/elastic/protections-artifacts.git"
+subdir = "yara/rules"
+description = "Elastic threat research"
+
+[features]
+capa = false  # opt-in via --capa flag (slow, downloads ~100MB rules on first use)
+yara = false  # opt-in via --yara flag (auto-downloads community rules on first use)
+# decompile = ""  # "", "r2", "ghidra", or "both"
+
+[output]
+no_color = false
+quiet = false
+json = false
+
+[llm]
+url = "http://localhost:11434"
+model = "llama3"
+timeout = 300
+report = false
+"""
+
+_DEFAULT_CAPA_RULES = Path.home() / ".local" / "share" / "binanalysis" / "capa-rules"
+_DEFAULT_YARA_RULES = Path.home() / ".local" / "share" / "binanalysis" / "yara-rules"
+
+
+def _ensure_default_config() -> None:
+    """Write default config to ~/.config/binanalysis/config.toml if it doesn't exist."""
+    config_path = Path.home() / ".config" / "binanalysis" / "config.toml"
+    if config_path.exists():
+        return
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(
+        _DEFAULT_CONFIG_CONTENT.format(
+            capa_rules=str(_DEFAULT_CAPA_RULES),
+            yara_rules=str(_DEFAULT_YARA_RULES),
+        )
+    )
+    from binanalysis.output import info
+    info(f"Created default config: {config_path}")
+
 
 @dataclass
 class Settings:
     # Paths
-    capa_rules: Path = Path("/tmp/capa-rules")
+    capa_rules: Path = _DEFAULT_CAPA_RULES
+    capa_rules_repo: str = "https://github.com/mandiant/capa-rules.git"
+    yara_community_dir: Path = _DEFAULT_YARA_RULES
+    yara_repos: dict = field(default_factory=lambda: {
+        "signature-base": {"repo": "https://github.com/Neo23x0/signature-base.git", "subdir": "yara"},
+        "yara-rules":     {"repo": "https://github.com/Yara-Rules/rules.git", "subdir": "."},
+        "gcti":           {"repo": "https://github.com/chronicle/GCTI.git", "subdir": "YARA"},
+        "reversinglabs":  {"repo": "https://github.com/reversinglabs/reversinglabs-yara-rules.git", "subdir": "yara"},
+        "eset":           {"repo": "https://github.com/eset/malware-ioc.git", "subdir": "."},
+        "elastic":        {"repo": "https://github.com/elastic/protections-artifacts.git", "subdir": "yara/rules"},
+    })
     yara_extra_dirs: list[Path] = field(default_factory=list)
     ghidra_headless: str = ""  # empty = auto-discover
 
     # Feature toggles
-    run_capa: bool = True
-    run_yara: bool = True
+    run_capa: bool = False
+    run_yara: bool = False
     run_decompile: str = ""  # "", "r2", "ghidra", "both"
 
     # Output
@@ -71,8 +167,8 @@ def parse_args():
         choices=["r2", "ghidra", "both"],
         help="Decompile with r2pipe, Ghidra, or both",
     )
-    parser.add_argument("--no-capa", action="store_true", help="Skip capa analysis")
-    parser.add_argument("--no-yara", action="store_true", help="Skip YARA scan")
+    parser.add_argument("--capa", action="store_true", help="Run capa capability detection (slow, auto-downloads rules on first use)")
+    parser.add_argument("--yara", action="store_true", help="Run YARA signature scan (auto-downloads community rules on first use)")
     parser.add_argument("--no-color", action="store_true", help="Disable colored output")
     parser.add_argument("--quiet", action="store_true", help="Only show verdict and critical findings")
     parser.add_argument("--config", type=Path, help="Path to config TOML file")
@@ -84,11 +180,13 @@ def parse_args():
     parser.add_argument("--llm-timeout", type=int, help="LLM request timeout in seconds (default: 300)")
     parser.add_argument("--debug", action="store_true", help="Save LLM prompt to file for inspection")
     parser.add_argument("--update-yara", action="store_true", help="Download/update community YARA rule repos before scanning")
+    parser.add_argument("--update-capa", action="store_true", help="Download/update capa rules before scanning")
     return parser.parse_args()
 
 
 def build_settings(args) -> Settings:
     """Merge CLI args over config file defaults."""
+    _ensure_default_config()
     config = load_config(getattr(args, "config", None))
 
     paths_cfg = config.get("paths", {})
@@ -99,17 +197,26 @@ def build_settings(args) -> Settings:
     settings = Settings(
         # Paths — CLI overrides config
         capa_rules=Path(
-            getattr(args, "capa_rules", None) or paths_cfg.get("capa_rules", "/tmp/capa-rules")
-        ),
+            getattr(args, "capa_rules", None)
+            or paths_cfg.get("capa_rules", str(_DEFAULT_CAPA_RULES))
+        ).expanduser(),
+        capa_rules_repo=paths_cfg.get("capa_rules_repo", "https://github.com/mandiant/capa-rules.git"),
+        yara_community_dir=Path(
+            paths_cfg.get("yara_community_dir", str(_DEFAULT_YARA_RULES))
+        ).expanduser(),
+        yara_repos=config.get("yara_repos", {
+            "Yara-Rules": "https://github.com/Yara-Rules/rules.git",
+            "reversinglabs": "https://github.com/reversinglabs/reversinglabs-yara-rules.git",
+        }),
         yara_extra_dirs=[
-            Path(d)
+            Path(d).expanduser()
             for d in (getattr(args, "yara_rules", None) or paths_cfg.get("yara_extra_dirs", []))
         ],
         ghidra_headless=paths_cfg.get("ghidra_headless", ""),
 
         # Features
-        run_capa=not getattr(args, "no_capa", False) and features_cfg.get("capa", True),
-        run_yara=not getattr(args, "no_yara", False) and features_cfg.get("yara", True),
+        run_capa=getattr(args, "capa", False) or features_cfg.get("capa", False),
+        run_yara=getattr(args, "yara", False) or features_cfg.get("yara", False),
         run_decompile=getattr(args, "decompile", None) or features_cfg.get("decompile", ""),
 
         # Output
