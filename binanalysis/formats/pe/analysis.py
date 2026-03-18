@@ -127,7 +127,11 @@ def analyze_imports(pe: pefile.PE) -> dict:
             all_suspicious[api.lower()] = category
 
     for entry in pe.DIRECTORY_ENTRY_IMPORT:
-        dll = entry.dll.decode('utf-8', errors='replace')
+        if not entry.dll:
+            continue
+        dll = entry.dll.decode('utf-8', errors='replace').strip('\x00')
+        if not dll or not any(dll.lower().endswith(ext) for ext in ('.dll', '.exe', '.sys', '.drv', '.ocx')):
+            continue
         funcs = []
         for imp in entry.imports:
             name = imp.name.decode('utf-8', errors='replace') if imp.name else f"ord({imp.ordinal})"
