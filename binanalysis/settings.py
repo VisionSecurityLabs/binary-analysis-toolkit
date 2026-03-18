@@ -57,11 +57,7 @@ class Settings:
     run_yara: bool = False
     run_decompile: str = ""  # "", "r2", "ghidra", "both"
 
-    # Output
-    no_color: bool = False
-    quiet: bool = False
-    save_json: bool = True
-    save_html: bool = True
+
 
     # LLM report
     llm_url: str = "http://localhost:11434"
@@ -87,7 +83,6 @@ def parse_args():
         description="Binary Analysis Toolkit (BAT) — PE static analysis with behavioral rules, capa, YARA, and decompiler integration",
     )
     parser.add_argument("file", type=Path, help="PE binary to analyze")
-    parser.add_argument("--no-reports", action="store_true", help="Skip saving JSON and HTML reports")
     parser.add_argument(
         "--decompile",
         choices=["r2", "ghidra", "both"],
@@ -95,8 +90,6 @@ def parse_args():
     )
     parser.add_argument("--capa", action="store_true", help="Run capa capability detection (slow, auto-downloads rules on first use)")
     parser.add_argument("--yara", action="store_true", help="Run YARA signature scan (auto-downloads community rules on first use)")
-    parser.add_argument("--no-color", action="store_true", help="Disable colored output")
-    parser.add_argument("--quiet", action="store_true", help="Only show verdict and critical findings")
     parser.add_argument("--config", type=Path, help="Path to config YAML file")
     parser.add_argument("--capa-rules", type=Path, help="Path to capa rules directory")
     parser.add_argument("--yara-rules", type=Path, nargs="+", help="Additional YARA rule directories")
@@ -148,10 +141,8 @@ def build_settings(args) -> Settings:
         run_decompile=getattr(args, "decompile", None) or features_cfg.get("decompile", ""),
 
         # Output
-        no_color=getattr(args, "no_color", False) or output_cfg.get("no_color", False),
-        quiet=getattr(args, "quiet", False) or output_cfg.get("quiet", False),
-        save_json=not getattr(args, "no_reports", False),
-        save_html=not getattr(args, "no_reports", False),
+
+
 
         # LLM report
         llm_url=getattr(args, "llm_url", None) or llm_cfg.get("url", "http://localhost:11434"),
@@ -160,11 +151,5 @@ def build_settings(args) -> Settings:
         run_report=getattr(args, "report", False) or llm_cfg.get("report", False),
         debug=getattr(args, "debug", False),
     )
-
-    # Apply no_color to output module
-    if settings.no_color:
-        from binanalysis.output import C
-        C.RED = C.GREEN = C.YELLOW = C.BLUE = C.MAGENTA = C.CYAN = ""
-        C.BOLD = C.RESET = ""
 
     return settings

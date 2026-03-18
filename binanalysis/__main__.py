@@ -184,11 +184,9 @@ def main():
         "capa": capa_results,
         "yara": yara_results,
     }
-    if settings.save_json:
-        generate_report(filepath, results)
-    if settings.save_html:
-        html_path = save_html_report(results, filepath)
-        info(f"HTML report: {html_path}")
+    generate_report(filepath, results)
+    html_path = save_html_report(results, filepath)
+    info(f"HTML report: {html_path}")
     if settings.run_report:
         generate_llm_report(results, filepath,
                             llm_url=settings.llm_url,
