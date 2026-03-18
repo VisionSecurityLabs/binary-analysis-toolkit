@@ -20,6 +20,7 @@ class PEContext(AnalysisContext):
     version_info: dict = field(default_factory=dict)
     dynamic_apis: list = field(default_factory=list)
     exports: list = field(default_factory=list)
+    dotnet: dict = field(default_factory=dict)
 
     # ── PE-specific predicates ──
 

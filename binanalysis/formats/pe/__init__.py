@@ -32,6 +32,9 @@ def analyze_pe(filepath: Path, data: bytes, generic_results: dict) -> PEContext:
     results["tls"] = analyze_tls(pe)
     results["compiler"] = analyze_compiler(data, pe, ascii_strs=ascii_set, wide_strs=wide_set)
 
+    from binanalysis.formats.pe.dotnet_analyzer import run_dotnet_analysis
+    results["dotnet"] = run_dotnet_analysis(filepath, pe)
+
     # Build flat imports set
     flat = set()
     for funcs in results["imports"].values():
@@ -53,6 +56,7 @@ def analyze_pe(filepath: Path, data: bytes, generic_results: dict) -> PEContext:
         version_info=results["version_info"],
         dynamic_apis=generic_results.get("dynamic_apis", []),
         exports=results["exports"],
+        dotnet=results["dotnet"],
     )
 
 

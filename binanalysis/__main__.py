@@ -10,6 +10,9 @@ from binanalysis.generic.hashes import analyze_hashes
 from binanalysis.generic.strings import analyze_strings, analyze_dynamic_apis
 from binanalysis.rules import run_behavioral_rules, run_ioc_extractors
 from binanalysis.formats import detect_format
+from binanalysis.settings import parse_args, build_settings
+from binanalysis.integrations.unpacker import try_unpack_upx
+from binanalysis.integrations.llm_report import generate_llm_report
 
 # Import format backends to trigger registration
 import binanalysis.formats.pe  # noqa: F401
@@ -81,12 +84,10 @@ def generate_report(filepath: Path, all_results: dict):
 
 
 def main():
-    if len(sys.argv) < 2:
-        print(f"Usage: python -m binanalysis <binary_file> [--json]")
-        sys.exit(1)
-
-    filepath = Path(sys.argv[1])
-    save_json = "--json" in sys.argv
+    args = parse_args()
+    filepath = args.file
+    settings = build_settings(args)
+    save_json = settings.save_json
 
     if not filepath.exists():
         print(f"[!] File not found: {filepath}")
@@ -94,6 +95,12 @@ def main():
 
     with open(filepath, "rb") as f:
         data = f.read()
+
+    # UPX unpack attempt
+    unpacked = try_unpack_upx(filepath)
+    if unpacked:
+        filepath = unpacked
+        data = open(filepath, "rb").read()
 
     handler = detect_format(data)
     if handler is None:
@@ -138,8 +145,15 @@ def main():
     iocs = run_ioc_extractors(ctx)
 
     # Integrations
-    capa_results = run_capa_analysis(filepath)
-    yara_results = run_yara_scan(data)
+    if settings.run_capa:
+        capa_results = run_capa_analysis(filepath)
+    else:
+        capa_results = []
+
+    if settings.run_yara:
+        yara_results = run_yara_scan(data)
+    else:
+        yara_results = []
 
     # Verdict
     classify(behaviors, capa_results, yara_results)
@@ -161,6 +175,13 @@ def main():
             "yara": yara_results,
         }
         generate_report(filepath, results)
+
+        if settings.run_report:
+            generate_llm_report(results, filepath,
+                                llm_url=settings.llm_url,
+                                llm_model=settings.llm_model,
+                                timeout=settings.llm_timeout,
+                                debug=settings.debug)
 
     print()
 

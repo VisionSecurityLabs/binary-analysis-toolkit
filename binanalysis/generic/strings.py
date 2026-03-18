@@ -3,6 +3,7 @@
 import re
 
 from binanalysis.config import SUSPICIOUS_STRING_PATTERNS
+from binanalysis.generic.deobfuscate import deobfuscate_strings
 from binanalysis.output import heading, subheading, info, warn, danger
 from binanalysis.strings import extract_ascii_strings, extract_wide_strings
 
@@ -51,6 +52,10 @@ def analyze_strings(data: bytes,
 
     all_strings = [(off, s, "ascii") for off, s in ascii_strings]
     all_strings += [(off, s, "wide") for off, s in wide_strings]
+
+    # Deobfuscate — decode base64/hex/XOR blobs and re-run pattern matching on results
+    deob = deobfuscate_strings(ascii_strings or []) + deobfuscate_strings(wide_strings or [])
+    all_strings += [(off, s, "deobfuscated") for off, s in deob]
 
     findings = {}
 
