@@ -1,4 +1,4 @@
-"""CLI entry point — python -m binanalysis <file> [--json]"""
+"""CLI entry point — python -m binanalysis <file>"""
 
 import sys
 import json
@@ -96,7 +96,6 @@ def main():
                                  repos=settings.yara_repos)
 
     filepath = args.file
-    save_json = settings.save_json
 
     if not filepath.exists():
         print(f"[!] File not found: {filepath}")
@@ -170,32 +169,32 @@ def main():
     # Verdict
     classify(behaviors, capa_results, yara_results)
 
-    if save_json:
-        results = {
-            "generic": {
-                "hashes": generic_results["hashes"],
-                "strings": {
-                    k: [{"value": i["value"], "encoding": i["encoding"]} for i in v]
-                    for k, v in generic_results["strings"].items()
-                },
-                "dynamic_apis": generic_results["dynamic_apis"],
+    results = {
+        "generic": {
+            "hashes": generic_results["hashes"],
+            "strings": {
+                k: [{"value": i["value"], "encoding": i["encoding"]} for i in v]
+                for k, v in generic_results["strings"].items()
             },
-            "format_specific": generic_results.get("format_specific", {}),
-            "behavior": {"behaviors": behaviors},
-            "iocs": iocs,
-            "capa": capa_results,
-            "yara": yara_results,
-        }
+            "dynamic_apis": generic_results["dynamic_apis"],
+        },
+        "format_specific": generic_results.get("format_specific", {}),
+        "behavior": {"behaviors": behaviors},
+        "iocs": iocs,
+        "capa": capa_results,
+        "yara": yara_results,
+    }
+    if settings.save_json:
         generate_report(filepath, results)
+    if settings.save_html:
         html_path = save_html_report(results, filepath)
         info(f"HTML report: {html_path}")
-
-        if settings.run_report:
-            generate_llm_report(results, filepath,
-                                llm_url=settings.llm_url,
-                                llm_model=settings.llm_model,
-                                timeout=settings.llm_timeout,
-                                debug=settings.debug)
+    if settings.run_report:
+        generate_llm_report(results, filepath,
+                            llm_url=settings.llm_url,
+                            llm_model=settings.llm_model,
+                            timeout=settings.llm_timeout,
+                            debug=settings.debug)
 
     print()
 

@@ -60,7 +60,8 @@ class Settings:
     # Output
     no_color: bool = False
     quiet: bool = False
-    save_json: bool = False
+    save_json: bool = True
+    save_html: bool = True
 
     # LLM report
     llm_url: str = "http://localhost:11434"
@@ -86,7 +87,7 @@ def parse_args():
         description="Binary Analysis Toolkit (BAT) — PE static analysis with behavioral rules, capa, YARA, and decompiler integration",
     )
     parser.add_argument("file", type=Path, help="PE binary to analyze")
-    parser.add_argument("--json", action="store_true", help="Save JSON report alongside binary")
+    parser.add_argument("--no-reports", action="store_true", help="Skip saving JSON and HTML reports")
     parser.add_argument(
         "--decompile",
         choices=["r2", "ghidra", "both"],
@@ -149,7 +150,8 @@ def build_settings(args) -> Settings:
         # Output
         no_color=getattr(args, "no_color", False) or output_cfg.get("no_color", False),
         quiet=getattr(args, "quiet", False) or output_cfg.get("quiet", False),
-        save_json=getattr(args, "json", False) or output_cfg.get("json", False),
+        save_json=not getattr(args, "no_reports", False),
+        save_html=not getattr(args, "no_reports", False),
 
         # LLM report
         llm_url=getattr(args, "llm_url", None) or llm_cfg.get("url", "http://localhost:11434"),
