@@ -1,0 +1,1270 @@
+#!/usr/bin/env python3
+"""
+PE Binary Static Analyzer
+Extracts IOCs, behavioral indicators, and suspicious patterns from PE executables.
+"""
+
+import sys
+import re
+import struct
+import hashlib
+import datetime
+import json
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Callable
+
+try:
+    import pefile
+except ImportError:
+    print("[!] pefile not installed. Run: rye add pefile")
+    sys.exit(1)
+
+try:
+    import yara
+    HAS_YARA = True
+except ImportError:
+    HAS_YARA = False
+
+try:
+    import capa.rules
+    import capa.loader
+    import capa.main
+    import capa.capabilities.static as capa_static
+    HAS_CAPA = True
+except ImportError:
+    HAS_CAPA = False
+
+
+# ─── Configuration ───────────────────────────────────────────────────────────
+
+SUSPICIOUS_IMPORTS = {
+    "injection": [
+        "VirtualAllocEx", "WriteProcessMemory", "ReadProcessMemory",
+        "CreateRemoteThread", "NtCreateThreadEx", "RtlCreateUserThread",
+        "OpenProcess", "NtOpenProcess", "QueueUserAPC",
+        "SetWindowsHookEx", "SetWindowsHookExA", "SetWindowsHookExW",
+    ],
+    "process": [
+        "CreateProcessW", "CreateProcessA", "WinExec", "ShellExecuteW",
+        "ShellExecuteA", "ShellExecuteExW",
+    ],
+    "persistence": [
+        "RegSetValueExA", "RegSetValueExW", "RegCreateKeyExA",
+        "RegCreateKeyExW", "CreateServiceW", "CreateServiceA",
+    ],
+    "credential_theft": [
+        "CredEnumerateA", "CredEnumerateW", "CryptUnprotectData",
+        "LsaEnumerateLogonSessions", "SamEnumerateUsersInDomain",
+    ],
+    "network": [
+        "WinHttpOpen", "WinHttpConnect", "WinHttpOpenRequest",
+        "WinHttpSendRequest", "WinHttpReceiveResponse", "WinHttpReadData",
+        "InternetOpenA", "InternetOpenW", "InternetConnectA",
+        "InternetConnectW", "HttpOpenRequestA", "HttpSendRequestA",
+        "URLDownloadToFileA", "URLDownloadToFileW",
+        "WSAStartup", "connect", "send", "recv",
+    ],
+    "crypto": [
+        "CryptEncrypt", "CryptDecrypt", "CryptAcquireContextA",
+        "CryptBinaryToStringA", "CryptStringToBinaryA",
+        "BCryptEncrypt", "BCryptDecrypt", "BCryptGenRandom",
+    ],
+    "evasion": [
+        "IsDebuggerPresent", "CheckRemoteDebuggerPresent",
+        "NtQueryInformationProcess", "GetTickCount", "QueryPerformanceCounter",
+        "VirtualProtect", "VirtualQuery",
+    ],
+    "token_manipulation": [
+        "OpenProcessToken", "AdjustTokenPrivileges",
+        "LookupPrivilegeValueA", "ImpersonateLoggedOnUser",
+        "DuplicateTokenEx",
+    ],
+    "com": [
+        "CoCreateInstance", "CoInitializeEx", "CoCreateGuid",
+    ],
+}
+
+SUSPICIOUS_STRING_PATTERNS = [
+    # URLs and domains
+    (r'https?://[^\x00\s]{5,200}', "url"),
+    (r'[a-zA-Z0-9-]+\.(com|net|org|io|xyz|top|ru|cn|tk|onion)', "domain"),
+    # Credentials and tokens
+    (r'github_pat_[A-Za-z0-9_]{30,}', "github_pat"),
+    (r'ghp_[A-Za-z0-9]{36}', "github_token"),
+    (r'Bearer\s+[A-Za-z0-9._\-]+', "bearer_token"),
+    (r'Authorization:\s*.+', "auth_header"),
+    (r'[A-Za-z0-9+/]{40,}={0,2}', "possible_base64"),
+    # API and C2
+    (r'api\.github\.com', "github_api"),
+    (r'/repos/[^\x00\s]+', "github_repo_path"),
+    (r'/contents/[^\x00\s]+', "github_contents_path"),
+    (r'User-Agent:\s*.+', "user_agent"),
+    (r'Content-Type:\s*.+', "content_type_header"),
+    (r'Accept:\s*.+', "accept_header"),
+    # OAuth / SSO
+    (r'login\.microsoftonline\.com', "ms_oauth"),
+    (r'oauth2?/authorize', "oauth_endpoint"),
+    (r'sso_nonce', "sso_nonce"),
+    (r'client_id=[^\x00\s&]+', "client_id"),
+    (r'redirect_uri=[^\x00\s&]+', "redirect_uri"),
+    (r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', "uuid"),
+    # File system
+    (r'C:\\[^\x00]{5,}', "windows_path"),
+    (r'%[A-Z]+%', "env_variable"),
+    (r'HKLM|HKCU|HKEY_', "registry_key"),
+    # JSON structures
+    (r'\{"[a-z_]+":', "json_object"),
+    (r'"message":', "json_message_key"),
+    (r'"content":', "json_content_key"),
+    (r'"branch":', "json_branch_key"),
+    # Recon
+    (r'whoami|systeminfo|ipconfig|hostname|tasklist|wmic', "recon_command"),
+]
+
+
+# ─── Helpers ─────────────────────────────────────────────────────────────────
+
+class Colors:
+    RED = "\033[91m"
+    GREEN = "\033[92m"
+    YELLOW = "\033[93m"
+    BLUE = "\033[94m"
+    MAGENTA = "\033[95m"
+    CYAN = "\033[96m"
+    BOLD = "\033[1m"
+    RESET = "\033[0m"
+
+C = Colors
+
+
+def heading(title: str):
+    print(f"\n{C.BOLD}{C.CYAN}{'═' * 70}")
+    print(f"  {title}")
+    print(f"{'═' * 70}{C.RESET}")
+
+
+def subheading(title: str):
+    print(f"\n  {C.BOLD}{C.BLUE}── {title} ──{C.RESET}")
+
+
+def warn(msg: str):
+    print(f"  {C.YELLOW}[!]{C.RESET} {msg}")
+
+
+def danger(msg: str):
+    print(f"  {C.RED}[!!]{C.RESET} {C.RED}{msg}{C.RESET}")
+
+
+def info(msg: str):
+    print(f"  {C.GREEN}[+]{C.RESET} {msg}")
+
+
+def detail(label: str, value: str):
+    print(f"      {C.BOLD}{label:20s}{C.RESET} {value}")
+
+
+def extract_ascii_strings(data: bytes, min_len: int = 4) -> list[tuple[int, str]]:
+    """Extract ASCII strings with their offsets."""
+    results = []
+    for m in re.finditer(rb'[\x20-\x7e]{%d,}' % min_len, data):
+        results.append((m.start(), m.group().decode('ascii', errors='replace')))
+    return results
+
+
+def extract_wide_strings(data: bytes, min_len: int = 4) -> list[tuple[int, str]]:
+    """Extract UTF-16LE (wide) strings with their offsets."""
+    results = []
+    for m in re.finditer(rb'(?:[\x20-\x7e]\x00){%d,}' % min_len, data):
+        try:
+            decoded = m.group().decode('utf-16-le')
+            results.append((m.start(), decoded))
+        except Exception:
+            pass
+    return results
+
+
+# ─── Rule Engine ─────────────────────────────────────────────────────────────
+
+@dataclass
+class AnalysisContext:
+    """Immutable bag of all analysis data, passed to every rule and extractor."""
+    data: bytes
+    pe: pefile.PE
+    imports: dict                      # dll_name -> [func_names]
+    flat_imports: set                   # all import function names
+    string_findings: dict              # category -> [{"value":…, "encoding":…, …}]
+    ascii_strings: set                 # deduplicated ascii string values
+    wide_strings: set                  # deduplicated wide string values
+    all_strings: set                   # ascii | wide
+    sections: list
+    version_info: dict
+    dynamic_apis: list
+
+    # ── convenience predicates ──
+
+    def has_import(self, *names: str) -> bool:
+        return bool(self.flat_imports & set(names))
+
+    def has_all_imports(self, *names: str) -> bool:
+        return set(names) <= self.flat_imports
+
+    def has_string_containing(self, substring: str) -> bool:
+        return any(substring in s for s in self.all_strings)
+
+    def has_finding(self, category: str) -> bool:
+        return bool(self.string_findings.get(category))
+
+    def any_section(self, predicate) -> bool:
+        return any(predicate(s) for s in self.sections)
+
+
+@dataclass
+class Rule:
+    """A single behavioral detection rule."""
+    name: str
+    category: str
+    severity: str          # critical | high | medium | low
+    description: str
+    check: Callable[["AnalysisContext"], bool]
+
+
+@dataclass
+class IOCExtractor:
+    """Pulls a specific IOC type from the analysis context."""
+    name: str
+    display: str           # human-readable label
+    level: str             # danger | warn | info
+    extract: Callable[["AnalysisContext"], list[str]]
+
+
+# ─── Generic Behavioral Rules ───────────────────────────────────────────────
+#
+# These fire on technique indicators, not on any single malware family.
+# Grouped by MITRE ATT&CK-ish category for readability.
+
+GENERIC_RULES: list[Rule] = [
+    # ── Injection ──
+    Rule("process_injection", "injection", "high",
+         "Classic process injection (VirtualAllocEx → WriteProcessMemory → CreateRemoteThread)",
+         lambda ctx: ctx.has_all_imports("VirtualAllocEx", "WriteProcessMemory", "CreateRemoteThread")),
+
+    Rule("apc_injection", "injection", "high",
+         "APC injection via QueueUserAPC",
+         lambda ctx: ctx.has_import("QueueUserAPC")),
+
+    Rule("dll_injection", "injection", "high",
+         "DLL injection via LoadLibrary + remote thread",
+         lambda ctx: ctx.has_import("CreateRemoteThread")
+                     and ctx.has_import("LoadLibraryA", "LoadLibraryW")),
+
+    Rule("hook_injection", "injection", "medium",
+         "Windows hook-based code injection",
+         lambda ctx: ctx.has_import("SetWindowsHookExA", "SetWindowsHookExW")),
+
+    Rule("ntcreatethread", "injection", "high",
+         "Low-level thread creation in remote process",
+         lambda ctx: ctx.has_import("NtCreateThreadEx", "RtlCreateUserThread")),
+
+    # ── Evasion / Anti-Analysis ──
+    Rule("anti_debug_api", "evasion", "medium",
+         "Debugger detection via API",
+         lambda ctx: ctx.has_import("IsDebuggerPresent", "CheckRemoteDebuggerPresent")),
+
+    Rule("anti_debug_nt", "evasion", "high",
+         "Debugger detection via NtQueryInformationProcess",
+         lambda ctx: ctx.has_import("NtQueryInformationProcess")),
+
+    Rule("timing_evasion", "evasion", "low",
+         "Timing-based sandbox/debugger detection",
+         lambda ctx: ctx.has_all_imports("GetTickCount", "QueryPerformanceCounter")),
+
+    Rule("anti_vm", "evasion", "medium",
+         "Virtual machine / sandbox detection strings",
+         lambda ctx: any(ctx.has_string_containing(vm) for vm in [
+             "VMwareService", "VMwareTray", "VBoxService", "VBoxTray",
+             "qemu-ga", "QEMU", "Sandboxie", "SbieDll", "cuckoomon",
+             "wine_get_unix_file_name",
+         ])),
+
+    Rule("tls_callback", "evasion", "medium",
+         "TLS callback may execute code before entry point",
+         lambda ctx: hasattr(ctx.pe, "DIRECTORY_ENTRY_TLS") and bool(ctx.pe.DIRECTORY_ENTRY_TLS)),
+
+    Rule("rwx_section", "evasion", "high",
+         "Section with both WRITE and EXECUTE permissions",
+         lambda ctx: ctx.any_section(
+             lambda s: "EXEC" in s.get("characteristics", "") and "WRITE" in s.get("characteristics", ""))),
+
+    Rule("high_entropy_section", "evasion", "medium",
+         "Section with entropy > 7.0 (likely packed or encrypted)",
+         lambda ctx: ctx.any_section(lambda s: s.get("entropy", 0) > 7.0)),
+
+    Rule("no_import_table", "evasion", "high",
+         "No import table — likely packed or manually resolves APIs",
+         lambda ctx: len(ctx.flat_imports) == 0),
+
+    # ── Credential Access ──
+    Rule("credential_api", "credential_theft", "high",
+         "Credential enumeration / DPAPI decryption APIs",
+         lambda ctx: ctx.has_import(
+             "CredEnumerateA", "CredEnumerateW",
+             "CryptUnprotectData",
+             "LsaEnumerateLogonSessions",
+         )),
+
+    Rule("token_manipulation", "privilege_escalation", "high",
+         "Token privilege escalation (OpenProcessToken + AdjustTokenPrivileges)",
+         lambda ctx: ctx.has_all_imports("OpenProcessToken", "AdjustTokenPrivileges")),
+
+    Rule("token_impersonation", "privilege_escalation", "high",
+         "Token impersonation / duplication",
+         lambda ctx: ctx.has_import("ImpersonateLoggedOnUser", "DuplicateTokenEx")),
+
+    # ── Persistence ──
+    Rule("registry_autorun", "persistence", "high",
+         "Registry persistence via Run / RunOnce keys",
+         lambda ctx: ctx.has_import("RegSetValueExA", "RegSetValueExW", "RegCreateKeyExA", "RegCreateKeyExW")
+                     and any(ctx.has_string_containing(k) for k in [
+                         "\\Run", "\\RunOnce", "CurrentVersion\\Run",
+                     ])),
+
+    Rule("service_creation", "persistence", "high",
+         "Persistence via Windows service creation",
+         lambda ctx: ctx.has_import("CreateServiceA", "CreateServiceW")),
+
+    Rule("scheduled_task", "persistence", "medium",
+         "Scheduled task creation strings",
+         lambda ctx: ctx.has_string_containing("schtasks") or ctx.has_string_containing("ITaskScheduler")),
+
+    Rule("startup_folder", "persistence", "medium",
+         "References to user Startup folder",
+         lambda ctx: ctx.has_string_containing("\\Startup\\") or ctx.has_string_containing("\\Start Menu\\")),
+
+    # ── Execution ──
+    Rule("process_creation", "execution", "medium",
+         "Creates child processes",
+         lambda ctx: ctx.has_import("CreateProcessA", "CreateProcessW", "WinExec")),
+
+    Rule("shellexecute", "execution", "medium",
+         "Launches programs via ShellExecute",
+         lambda ctx: ctx.has_import("ShellExecuteA", "ShellExecuteW", "ShellExecuteExW")),
+
+    Rule("dynamic_api_resolution", "execution", "medium",
+         "Dynamically resolves APIs (GetProcAddress + LoadLibrary)",
+         lambda ctx: ctx.has_all_imports("GetProcAddress", "LoadLibraryA")
+                     or ctx.has_all_imports("GetProcAddress", "LoadLibraryW")),
+
+    Rule("recon_commands", "discovery", "medium",
+         "Contains reconnaissance commands (whoami, systeminfo, etc.)",
+         lambda ctx: ctx.has_finding("recon_command")),
+
+    # ── Network / C2 ──
+    Rule("winhttp_usage", "network", "medium",
+         "HTTP communication via WinHTTP",
+         lambda ctx: ctx.has_import("WinHttpOpen", "WinHttpConnect")),
+
+    Rule("wininet_usage", "network", "medium",
+         "HTTP communication via WinINet",
+         lambda ctx: ctx.has_import("InternetOpenA", "InternetOpenW")),
+
+    Rule("url_download", "network", "high",
+         "Downloads file from URL to disk",
+         lambda ctx: ctx.has_import("URLDownloadToFileA", "URLDownloadToFileW")),
+
+    Rule("raw_sockets", "network", "medium",
+         "Raw socket usage (WSAStartup + connect)",
+         lambda ctx: ctx.has_all_imports("WSAStartup", "connect")),
+
+    Rule("embedded_urls", "network", "medium",
+         "Contains embedded URLs",
+         lambda ctx: ctx.has_finding("url")),
+
+    # ── Crypto ──
+    Rule("crypto_encrypt", "crypto", "low",
+         "Uses Windows Crypto API for encryption",
+         lambda ctx: ctx.has_import("CryptEncrypt", "BCryptEncrypt")),
+
+    Rule("crypto_decrypt", "crypto", "low",
+         "Uses Windows Crypto API for decryption",
+         lambda ctx: ctx.has_import("CryptDecrypt", "BCryptDecrypt")),
+
+    Rule("base64_encoding", "encoding", "low",
+         "Base64 encodes data via CryptBinaryToString",
+         lambda ctx: ctx.has_import("CryptBinaryToStringA", "CryptBinaryToStringW")),
+
+    # ── Masquerading (generic) ──
+    Rule("version_mismatch", "masquerading", "high",
+         "Version info claims known vendor but binary lacks expected characteristics",
+         lambda ctx: _check_version_mismatch(ctx)),
+]
+
+
+def _check_version_mismatch(ctx: AnalysisContext) -> bool:
+    """Generic masquerading: version info claims Microsoft/Adobe/Google but no valid signature."""
+    claimed = ctx.version_info.get("CompanyName", "").lower()
+    known_vendors = ["microsoft", "adobe", "google", "mozilla", "apple"]
+    if not any(v in claimed for v in known_vendors):
+        return False
+    # If it claims to be from a major vendor but has no import table or high entropy → suspicious
+    return len(ctx.flat_imports) == 0 or any(
+        s.get("entropy", 0) > 7.0 for s in ctx.sections
+    )
+
+
+# ─── Specimen-Specific Rule Sets ────────────────────────────────────────────
+#
+# These detect specific malware families or campaigns.  They are loaded into
+# the engine alongside GENERIC_RULES but are clearly separated so analysts
+# know when a finding is family-specific vs. technique-generic.
+
+SPECIMEN_RULES: list[Rule] = [
+    # ── GitHub dead-drop C2 ──
+    Rule("github_dead_drop", "exfiltration", "critical",
+         "Exfiltrates data to GitHub repo (dead-drop C2) — contains PAT + API references",
+         lambda ctx: ctx.has_finding("github_pat") and ctx.has_finding("github_api")),
+
+    # ── OAuth / SSO token theft ──
+    Rule("ms_oauth_theft", "credential_theft", "high",
+         "Targets Microsoft OAuth / SSO tokens",
+         lambda ctx: ctx.has_finding("ms_oauth") or ctx.has_finding("oauth_endpoint")),
+
+    Rule("sso_nonce_extraction", "credential_theft", "high",
+         "Extracts SSO nonce values for session hijacking",
+         lambda ctx: ctx.has_finding("sso_nonce")),
+
+    # ── Browser cookie theft via COM ──
+    Rule("cookie_theft_com", "credential_theft", "high",
+         "Steals browser cookies via COM interface (GetCookieInfoForUri)",
+         lambda ctx: ctx.has_string_containing("GetCookieInfoForUri")),
+
+    # ── Application masquerading ──
+    Rule("masquerade_excel", "masquerading", "high",
+         "Disguised as Microsoft Excel",
+         lambda ctx: any("Excel" in ctx.version_info.get(k, "")
+                         for k in ["ProductName", "FileDescription", "OriginalFilename"])),
+
+    Rule("masquerade_word", "masquerading", "high",
+         "Disguised as Microsoft Word",
+         lambda ctx: any("Word" in ctx.version_info.get(k, "")
+                         for k in ["ProductName", "FileDescription", "OriginalFilename"])),
+
+    Rule("masquerade_chrome", "masquerading", "high",
+         "Disguised as Google Chrome",
+         lambda ctx: any("Chrome" in ctx.version_info.get(k, "")
+                         for k in ["ProductName", "FileDescription", "OriginalFilename"])
+                     and not ctx.has_string_containing("chrome.dll")),
+]
+
+
+# ─── IOC Extractors ─────────────────────────────────────────────────────────
+#
+# Each extractor pulls one IOC category from the context.
+# Returns a list of string values; the engine handles display and dedup.
+
+IOC_EXTRACTORS: list[IOCExtractor] = [
+    IOCExtractor("urls", "URLs", "warn",
+                 lambda ctx: [i["value"] for i in ctx.string_findings.get("url", [])]),
+
+    IOCExtractor("domains", "Domains", "info",
+                 lambda ctx: [i["value"] for i in ctx.string_findings.get("domain", [])]),
+
+    IOCExtractor("credentials", "Embedded Credentials / Tokens", "danger",
+                 lambda ctx: [i["value"][:60] + "…" for i in
+                              ctx.string_findings.get("github_pat", [])
+                              + ctx.string_findings.get("github_token", [])
+                              + ctx.string_findings.get("bearer_token", [])]),
+
+    IOCExtractor("user_agents", "User-Agent Strings", "info",
+                 lambda ctx: [i["value"] for i in ctx.string_findings.get("user_agent", [])]),
+
+    IOCExtractor("windows_paths", "Windows File Paths", "info",
+                 lambda ctx: [i["value"] for i in ctx.string_findings.get("windows_path", [])]),
+
+    IOCExtractor("registry_keys", "Registry Keys", "warn",
+                 lambda ctx: [i["value"] for i in ctx.string_findings.get("registry_key", [])]),
+
+    IOCExtractor("oauth_endpoints", "OAuth / SSO Endpoints", "warn",
+                 lambda ctx: [i["value"] for i in
+                              ctx.string_findings.get("ms_oauth", [])
+                              + ctx.string_findings.get("oauth_endpoint", [])]),
+
+    IOCExtractor("uuids", "UUIDs / GUIDs", "info",
+                 lambda ctx: [i["value"] for i in ctx.string_findings.get("uuid", [])]),
+
+    IOCExtractor("env_vars", "Environment Variables", "info",
+                 lambda ctx: [i["value"] for i in ctx.string_findings.get("env_variable", [])]),
+]
+
+
+# ─── Capa Integration ────────────────────────────────────────────────────────
+
+DEFAULT_CAPA_RULES = Path("/tmp/capa-rules")
+DEFAULT_YARA_DIR = Path(__file__).parent / "yara_rules"
+PEFRAME_YARA_DIR = Path(sys.prefix) / "lib" / f"python{sys.version_info.major}.{sys.version_info.minor}" / "site-packages" / "peframe" / "signatures" / "yara_plugins" / "pe"
+
+
+def run_capa_analysis(filepath: Path, rules_path: Path | None = None) -> list[dict]:
+    """Run capa capability detection on a PE binary.
+    Returns a list of capability dicts with name, ATT&CK mapping, and namespace."""
+    if not HAS_CAPA:
+        info("capa not installed — skipping capability detection (rye add flare-capa)")
+        return []
+
+    rules_path = rules_path or DEFAULT_CAPA_RULES
+    if not rules_path.exists():
+        warn(f"capa rules not found at {rules_path}")
+        info("Download: git clone --depth 1 https://github.com/mandiant/capa-rules.git /tmp/capa-rules")
+        return []
+
+    heading("CAPA CAPABILITY DETECTION")
+
+    import logging, io
+    prev_level = logging.root.level
+    logging.disable(logging.CRITICAL)
+    old_stderr = sys.stderr
+    sys.stderr = io.StringIO()
+
+    try:
+        ruleset = capa.rules.get_rules([rules_path], enable_cache=True)
+        sigpaths = capa.loader.get_signatures(Path("/tmp"))
+        extractor = capa.loader.get_extractor(
+            filepath, capa.loader.FORMAT_PE, capa.loader.OS_AUTO,
+            capa.loader.BACKEND_VIV, sigpaths, disable_progress=True,
+        )
+        caps = capa.main.find_capabilities(ruleset, extractor, disable_progress=True)
+    except Exception as e:
+        sys.stderr = old_stderr
+        logging.disable(prev_level)
+        warn(f"capa analysis failed: {e}")
+        return []
+    finally:
+        sys.stderr = old_stderr
+        logging.disable(prev_level)
+
+    results = []
+    for rule_name, addresses in caps.matches.items():
+        rule = ruleset.rules[rule_name]
+        if rule.is_subscope_rule():
+            continue
+
+        att_ck = []
+        for entry in rule.meta.get("att&ck", []):
+            att_ck.append(str(entry.name) if hasattr(entry, "name") else str(entry))
+
+        namespace = rule.meta.get("namespace", "")
+        results.append({
+            "name": rule_name,
+            "namespace": namespace,
+            "att&ck": att_ck,
+        })
+
+    # Display grouped by namespace
+    by_ns = {}
+    for r in results:
+        ns = r["namespace"].split("/")[0] if r["namespace"] else "other"
+        by_ns.setdefault(ns, []).append(r)
+
+    for ns in sorted(by_ns):
+        subheading(ns.replace("-", " ").title())
+        for r in sorted(by_ns[ns], key=lambda x: x["name"]):
+            att = f"  [{r['att&ck'][0]}]" if r["att&ck"] else ""
+            info(f"{r['name']}{att}")
+
+    detail("Total capabilities", str(len(results)))
+    return results
+
+
+def run_yara_scan(data: bytes, extra_dirs: list[Path] | None = None) -> list[dict]:
+    """Scan binary with YARA rules from peframe + any custom directories.
+    Returns list of match dicts with rule name, tags, and source file."""
+    if not HAS_YARA:
+        info("yara-python not installed — skipping signature scan (rye add yara-python)")
+        return []
+
+    heading("YARA SIGNATURE SCAN")
+
+    rule_dirs = []
+    if PEFRAME_YARA_DIR.exists():
+        rule_dirs.append(PEFRAME_YARA_DIR)
+    if extra_dirs:
+        rule_dirs.extend(d for d in extra_dirs if d.exists())
+    if DEFAULT_YARA_DIR.exists():
+        rule_dirs.append(DEFAULT_YARA_DIR)
+
+    if not rule_dirs:
+        warn("No YARA rule directories found")
+        return []
+
+    results = []
+    for rule_dir in rule_dirs:
+        for yar_file in sorted(rule_dir.glob("*.yar*")):
+            try:
+                rules = yara.compile(filepath=str(yar_file))
+                matches = rules.match(data=data)
+                for m in matches:
+                    results.append({
+                        "rule": m.rule,
+                        "tags": list(m.tags),
+                        "source": yar_file.name,
+                    })
+            except yara.Error:
+                continue
+
+    if results:
+        for r in results:
+            tag_str = f"  {r['tags']}" if r["tags"] else ""
+            info(f"{r['rule']}{tag_str}  ({r['source']})")
+    else:
+        info("No YARA signature matches")
+
+    detail("Total matches", str(len(results)))
+    return results
+
+
+# ─── Rule Engine Runner ─────────────────────────────────────────────────────
+
+def build_context(data: bytes, pe: pefile.PE, imports: dict, string_findings: dict,
+                  sections: list, version_info: dict, dynamic_apis: list,
+                  ascii_strs: set, wide_strs: set) -> AnalysisContext:
+    """Assemble a read-only context for rules and extractors."""
+    flat = set()
+    for funcs in imports.values():
+        flat.update(funcs)
+    return AnalysisContext(
+        data=data, pe=pe,
+        imports=imports, flat_imports=flat,
+        string_findings=string_findings,
+        ascii_strings=ascii_strs, wide_strings=wide_strs,
+        all_strings=ascii_strs | wide_strs,
+        sections=sections, version_info=version_info,
+        dynamic_apis=dynamic_apis,
+    )
+
+
+def run_behavioral_rules(ctx: AnalysisContext,
+                         rules: list[Rule] | None = None) -> list[dict]:
+    """Evaluate all rules against the context. Returns triggered findings."""
+    heading("BEHAVIORAL ANALYSIS")
+
+    if rules is None:
+        rules = GENERIC_RULES + SPECIMEN_RULES
+
+    triggered = []
+    for rule in rules:
+        try:
+            if rule.check(ctx):
+                triggered.append({
+                    "rule": rule.name,
+                    "category": rule.category,
+                    "severity": rule.severity,
+                    "description": rule.description,
+                })
+        except Exception:
+            pass  # rule evaluation errors are silently skipped
+
+    if triggered:
+        for t in triggered:
+            printer = danger if t["severity"] in ("critical", "high") else warn
+            printer(f"{t['category'].upper()}: {t['description']}")
+    else:
+        info("No clearly malicious behavioral patterns detected")
+
+    return triggered
+
+
+def run_ioc_extractors(ctx: AnalysisContext,
+                       extractors: list[IOCExtractor] | None = None) -> dict:
+    """Run all IOC extractors, display results, return structured dict."""
+    heading("INDICATORS OF COMPROMISE (IOCs)")
+
+    if extractors is None:
+        extractors = IOC_EXTRACTORS
+
+    printer_map = {"danger": danger, "warn": warn, "info": info}
+    iocs = {}
+
+    for ext in extractors:
+        try:
+            values = ext.extract(ctx)
+        except Exception:
+            continue
+        # deduplicate preserving order
+        seen = set()
+        deduped = []
+        for v in values:
+            if v not in seen:
+                seen.add(v)
+                deduped.append(v)
+        if not deduped:
+            continue
+        iocs[ext.name] = deduped
+        subheading(ext.display)
+        printer = printer_map.get(ext.level, info)
+        for v in deduped[:20]:
+            printer(v)
+
+    if ctx.version_info:
+        iocs["version_info"] = ctx.version_info
+
+    return iocs
+
+
+def classify(behaviors: list[dict], capa_results: list[dict], yara_results: list[dict]):
+    """Print final verdict combining custom rules, capa capabilities, and YARA matches."""
+    heading("CLASSIFICATION")
+
+    # Score from our custom behavioral rules
+    counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+    for b in behaviors:
+        counts[b.get("severity", "low")] += 1
+
+    # Boost score from capa ATT&CK-mapped capabilities
+    offensive_namespaces = {
+        "anti-analysis", "collection", "impact", "persistence",
+        "exploitation", "communication",
+    }
+    capa_offensive = [c for c in capa_results
+                      if c.get("namespace", "").split("/")[0] in offensive_namespaces
+                      or c.get("att&ck")]
+    if len(capa_offensive) >= 5:
+        counts["high"] += 1
+    elif len(capa_offensive) >= 3:
+        counts["medium"] += 1
+
+    # Boost from YARA packer / anti-debug hits
+    yara_suspicious = [y for y in yara_results
+                       if y["source"] in ("antidebug_antivm.yar", "packer.yar")]
+    if yara_suspicious:
+        counts["medium"] += 1
+
+    # Verdict
+    if counts["critical"] > 0:
+        danger("VERDICT: MALICIOUS — Critical indicators detected")
+    elif counts["high"] >= 2:
+        danger("VERDICT: LIKELY MALICIOUS — Multiple high-severity indicators")
+    elif counts["high"] >= 1:
+        warn("VERDICT: SUSPICIOUS — High-severity indicators present")
+    elif counts["medium"] >= 2:
+        warn("VERDICT: SUSPICIOUS — Multiple medium-severity indicators")
+    else:
+        info("VERDICT: No strong malicious indicators (may require dynamic analysis)")
+
+    # Detail breakdown
+    if behaviors:
+        subheading("Custom Rules")
+        for b in behaviors:
+            color = C.RED if b["severity"] in ("critical", "high") else C.YELLOW
+            print(f"      {color}[{b['severity'].upper()}]{C.RESET} {b['description']}")
+
+    if capa_offensive:
+        subheading(f"Capa Offensive Capabilities ({len(capa_offensive)}/{len(capa_results)} total)")
+        for c in capa_offensive[:10]:
+            att = f"  [{c['att&ck'][0]}]" if c.get("att&ck") else ""
+            print(f"      {C.YELLOW}[CAPA]{C.RESET} {c['name']}{att}")
+
+    if yara_suspicious:
+        subheading("YARA Suspicious Signatures")
+        for y in yara_suspicious:
+            print(f"      {C.YELLOW}[YARA]{C.RESET} {y['rule']}  ({y['source']})")
+
+
+# ─── Analysis Functions ──────────────────────────────────────────────────────
+
+def analyze_hashes(filepath: Path, data: bytes) -> dict:
+    """Compute file hashes."""
+    heading("FILE HASHES")
+    hashes = {
+        "md5": hashlib.md5(data).hexdigest(),
+        "sha1": hashlib.sha1(data).hexdigest(),
+        "sha256": hashlib.sha256(data).hexdigest(),
+    }
+    detail("MD5", hashes["md5"])
+    detail("SHA1", hashes["sha1"])
+    detail("SHA256", hashes["sha256"])
+    detail("File Size", f"{len(data)} bytes ({len(data)/1024:.1f} KB)")
+    detail("File Name", filepath.name)
+    return hashes
+
+
+def analyze_pe_headers(pe: pefile.PE) -> dict:
+    """Analyze PE headers for basic info and anomalies."""
+    heading("PE HEADER ANALYSIS")
+
+    machine_types = {0x14c: "i386", 0x8664: "AMD64", 0x1c0: "ARM", 0xaa64: "ARM64"}
+    subsystems = {
+        1: "Native", 2: "Windows GUI", 3: "Windows Console",
+        7: "POSIX", 9: "WinCE", 14: "EFI Application",
+    }
+
+    machine = pe.FILE_HEADER.Machine
+    ts = pe.FILE_HEADER.TimeDateStamp
+    compile_time = datetime.datetime.utcfromtimestamp(ts)
+
+    result = {
+        "machine": machine_types.get(machine, hex(machine)),
+        "compile_time": str(compile_time),
+        "compile_timestamp_hex": hex(ts),
+        "subsystem": subsystems.get(pe.OPTIONAL_HEADER.Subsystem, "Unknown"),
+        "entry_point": hex(pe.OPTIONAL_HEADER.AddressOfEntryPoint),
+        "image_base": hex(pe.OPTIONAL_HEADER.ImageBase),
+        "num_sections": pe.FILE_HEADER.NumberOfSections,
+    }
+
+    subheading("Basic Info")
+    detail("Architecture", result["machine"])
+    detail("Subsystem", result["subsystem"])
+    detail("Compile Time", f"{compile_time} UTC ({hex(ts)})")
+    detail("Entry Point", result["entry_point"])
+    detail("Image Base", result["image_base"])
+    detail("Sections", str(result["num_sections"]))
+
+    # Timestamp anomalies
+    now = datetime.datetime.utcnow()
+    if compile_time > now:
+        warn(f"Compile time is in the FUTURE — likely forged")
+    elif (now - compile_time).days < 7:
+        warn(f"Compiled very recently ({(now - compile_time).days} days ago)")
+    elif compile_time.year < 2000:
+        warn(f"Compile time suspiciously old — likely forged")
+
+    # Security features
+    subheading("Security Features")
+    dll_chars = pe.OPTIONAL_HEADER.DllCharacteristics
+    aslr = bool(dll_chars & 0x40)
+    dep = bool(dll_chars & 0x100)
+    no_seh = bool(dll_chars & 0x400)
+    cfg = bool(dll_chars & 0x4000)
+    detail("ASLR", f"{'Enabled' if aslr else 'DISABLED'}")
+    detail("DEP/NX", f"{'Enabled' if dep else 'DISABLED'}")
+    detail("No SEH", f"{'Yes' if no_seh else 'No'}")
+    detail("Control Flow Guard", f"{'Enabled' if cfg else 'Disabled'}")
+
+    return result
+
+
+def analyze_sections(pe: pefile.PE) -> list[dict]:
+    """Analyze PE sections for anomalies."""
+    heading("SECTIONS")
+
+    sections = []
+    print(f"  {'Name':10s} {'VirtAddr':>12s} {'VirtSize':>10s} {'RawSize':>10s} {'Entropy':>8s}  Flags")
+    print(f"  {'─' * 70}")
+
+    for s in pe.sections:
+        name = s.Name.decode('utf-8', errors='replace').rstrip('\x00')
+        entropy = s.get_entropy()
+        chars = []
+        if s.Characteristics & 0x20000000:
+            chars.append("EXEC")
+        if s.Characteristics & 0x40000000:
+            chars.append("READ")
+        if s.Characteristics & 0x80000000:
+            chars.append("WRITE")
+
+        flags_str = "|".join(chars)
+        ent_color = C.RESET
+        ent_note = ""
+        if entropy > 7.0:
+            ent_color = C.RED
+            ent_note = " PACKED/ENCRYPTED"
+        elif entropy > 6.5:
+            ent_color = C.YELLOW
+            ent_note = " elevated"
+
+        sec_info = {
+            "name": name,
+            "virtual_address": hex(s.VirtualAddress),
+            "virtual_size": hex(s.Misc_VirtualSize),
+            "raw_size": hex(s.SizeOfRawData),
+            "entropy": round(entropy, 2),
+            "characteristics": flags_str,
+        }
+        sections.append(sec_info)
+
+        print(f"  {name:10s} {hex(s.VirtualAddress):>12s} {hex(s.Misc_VirtualSize):>10s} "
+              f"{hex(s.SizeOfRawData):>10s} {ent_color}{entropy:>7.2f}{ent_note}{C.RESET}  {flags_str}")
+
+        # Anomalies
+        if s.SizeOfRawData == 0 and s.Misc_VirtualSize > 0:
+            warn(f"  Section '{name}' has zero raw size but non-zero virtual size")
+        if s.Characteristics & 0x20000000 and s.Characteristics & 0x80000000:
+            warn(f"  Section '{name}' is both WRITABLE and EXECUTABLE")
+
+    return sections
+
+
+def analyze_imports(pe: pefile.PE) -> dict:
+    """Analyze imports and flag suspicious APIs."""
+    heading("IMPORTS ANALYSIS")
+
+    imports = {}
+    suspicious_found = {}
+
+    if not hasattr(pe, 'DIRECTORY_ENTRY_IMPORT'):
+        info("No import table found (possible packing)")
+        return imports
+
+    # Build a flat set of all suspicious API names for quick lookup
+    all_suspicious = {}
+    for category, apis in SUSPICIOUS_IMPORTS.items():
+        for api in apis:
+            all_suspicious[api.lower()] = category
+
+    for entry in pe.DIRECTORY_ENTRY_IMPORT:
+        dll = entry.dll.decode('utf-8', errors='replace')
+        funcs = []
+        for imp in entry.imports:
+            name = imp.name.decode('utf-8', errors='replace') if imp.name else f"ord({imp.ordinal})"
+            funcs.append(name)
+            # Check if suspicious
+            cat = all_suspicious.get(name.lower()) or all_suspicious.get(name.rstrip('AW').lower())
+            if cat:
+                suspicious_found.setdefault(cat, []).append(f"{dll}!{name}")
+
+        imports[dll] = funcs
+        print(f"  {C.BOLD}{dll}{C.RESET} ({len(funcs)} functions)")
+
+    if suspicious_found:
+        subheading("Suspicious API Usage")
+        for category, apis in sorted(suspicious_found.items()):
+            danger(f"{category.upper()}:")
+            for api in apis:
+                print(f"      → {api}")
+
+    return imports
+
+
+def analyze_exports(pe: pefile.PE) -> list[str]:
+    """Check for exports."""
+    heading("EXPORTS")
+    exports = []
+    if hasattr(pe, 'DIRECTORY_ENTRY_EXPORT'):
+        for exp in pe.DIRECTORY_ENTRY_EXPORT.symbols:
+            name = exp.name.decode() if exp.name else f"ord({exp.ordinal})"
+            exports.append(name)
+            detail(name, hex(exp.address))
+    else:
+        info("No exports (typical for EXE)")
+    return exports
+
+
+def analyze_resources(pe: pefile.PE) -> dict:
+    """Analyze embedded resources."""
+    heading("RESOURCES")
+
+    resource_types = {
+        1: "RT_CURSOR", 2: "RT_BITMAP", 3: "RT_ICON", 4: "RT_MENU",
+        5: "RT_DIALOG", 6: "RT_STRING", 9: "RT_ACCELERATOR",
+        10: "RT_RCDATA", 14: "RT_GROUP_ICON", 16: "RT_VERSION",
+        24: "RT_MANIFEST",
+    }
+
+    resources = {}
+    if not hasattr(pe, 'DIRECTORY_ENTRY_RESOURCE'):
+        info("No resources found")
+        return resources
+
+    for entry in pe.DIRECTORY_ENTRY_RESOURCE.entries:
+        rtype = resource_types.get(entry.id, f"Type_{entry.id}")
+        rname = str(entry.name) if entry.name else rtype
+        resources[rname] = {"type_id": entry.id, "type_name": rtype}
+        info(f"{rtype} (id={entry.id})")
+
+    return resources
+
+
+def analyze_version_info(pe: pefile.PE) -> dict:
+    """Extract version/metadata information."""
+    heading("VERSION INFO (METADATA)")
+
+    version = {}
+    if hasattr(pe, 'FileInfo'):
+        for fi_list in pe.FileInfo:
+            for entry in fi_list:
+                if hasattr(entry, 'StringTable'):
+                    for st in entry.StringTable:
+                        for k, v in st.entries.items():
+                            key = k.decode('utf-8', errors='replace')
+                            val = v.decode('utf-8', errors='replace')
+                            version[key] = val
+                            detail(key, val)
+
+    if not version:
+        info("No version info found")
+
+    return version
+
+
+def analyze_tls(pe: pefile.PE) -> dict:
+    """Check for TLS callbacks (anti-analysis technique)."""
+    heading("TLS CALLBACKS")
+
+    tls = {}
+    if hasattr(pe, 'DIRECTORY_ENTRY_TLS') and pe.DIRECTORY_ENTRY_TLS:
+        addr = pe.DIRECTORY_ENTRY_TLS.struct.AddressOfCallBacks
+        tls["callback_address"] = hex(addr)
+        warn(f"TLS callback table at {hex(addr)} — may execute code before entry point")
+    else:
+        info("No TLS callbacks")
+
+    return tls
+
+
+def analyze_strings(data: bytes) -> dict:
+    """Extract and categorize interesting strings."""
+    heading("STRING ANALYSIS")
+
+    ascii_strings = extract_ascii_strings(data, min_len=4)
+    wide_strings = extract_wide_strings(data, min_len=4)
+
+    all_strings = [(off, s, "ascii") for off, s in ascii_strings]
+    all_strings += [(off, s, "wide") for off, s in wide_strings]
+
+    findings = {}
+
+    for offset, string, encoding in all_strings:
+        for pattern, category in SUSPICIOUS_STRING_PATTERNS:
+            for m in re.finditer(pattern, string, re.IGNORECASE):
+                match_str = m.group()
+                findings.setdefault(category, []).append({
+                    "value": match_str,
+                    "offset": offset,
+                    "encoding": encoding,
+                    "full_string": string[:200],
+                })
+
+    # Deduplicate by value within each category
+    for cat in findings:
+        seen = set()
+        deduped = []
+        for item in findings[cat]:
+            if item["value"] not in seen:
+                seen.add(item["value"])
+                deduped.append(item)
+        findings[cat] = deduped
+
+    # Print grouped findings
+    category_labels = {
+        "url": "URLs",
+        "domain": "Domains / Hostnames",
+        "github_pat": "GitHub Personal Access Tokens",
+        "github_token": "GitHub Tokens",
+        "bearer_token": "Bearer Tokens",
+        "auth_header": "Authorization Headers",
+        "github_api": "GitHub API References",
+        "github_repo_path": "GitHub Repo Paths",
+        "github_contents_path": "GitHub Contents Paths",
+        "user_agent": "User-Agent Strings",
+        "content_type_header": "Content-Type Headers",
+        "accept_header": "Accept Headers",
+        "ms_oauth": "Microsoft OAuth Endpoints",
+        "oauth_endpoint": "OAuth Endpoints",
+        "sso_nonce": "SSO Nonce References",
+        "client_id": "Client IDs",
+        "redirect_uri": "Redirect URIs",
+        "uuid": "UUIDs / GUIDs",
+        "windows_path": "Windows File Paths",
+        "env_variable": "Environment Variables",
+        "registry_key": "Registry Keys",
+        "json_object": "JSON Structures",
+        "json_message_key": "JSON 'message' Keys",
+        "json_content_key": "JSON 'content' Keys",
+        "json_branch_key": "JSON 'branch' Keys",
+        "recon_command": "Reconnaissance Commands",
+        "possible_base64": "Possible Base64 Blobs",
+    }
+
+    # Skip noisy categories for display
+    skip_display = {"possible_base64"}
+
+    for cat, items in sorted(findings.items()):
+        if cat in skip_display:
+            continue
+        label = category_labels.get(cat, cat)
+        subheading(label)
+        for item in items[:20]:  # limit display
+            enc_tag = f" [{item['encoding']}]" if item['encoding'] == 'wide' else ""
+            if cat in ("github_pat", "github_token", "bearer_token"):
+                danger(f"{item['value']}{enc_tag}")
+            elif cat in ("url", "ms_oauth", "github_api", "windows_path"):
+                warn(f"{item['value']}{enc_tag}")
+            else:
+                info(f"{item['value']}{enc_tag}")
+
+    return findings
+
+
+def analyze_dynamic_apis(data: bytes) -> list[str]:
+    """Find API names that may be resolved dynamically via GetProcAddress."""
+    heading("DYNAMICALLY RESOLVED APIs")
+
+    suspicious_keywords = [
+        "Create", "Open", "Write", "Read", "Virtual", "Alloc", "Process",
+        "Thread", "Token", "Registry", "Shell", "Internet", "Http", "Socket",
+        "Inject", "Hook", "Crypt", "Download", "Upload", "Execute", "Startup",
+        "Service", "Pipe", "LoadLibrary", "GetProc",
+    ]
+
+    api_names = set()
+    for m in re.finditer(rb'([A-Z][a-zA-Z0-9]{5,50}(?:W|A)?)\x00', data):
+        name = m.group(1).decode('ascii', errors='ignore')
+        if any(kw in name for kw in suspicious_keywords):
+            api_names.add(name)
+
+    if api_names:
+        for name in sorted(api_names):
+            warn(f"{name}")
+    else:
+        info("No dynamically resolved suspicious APIs detected")
+
+    return sorted(api_names)
+
+
+def analyze_compiler(data: bytes, pe: pefile.PE) -> dict:
+    """Detect compiler and linker."""
+    heading("COMPILER / TOOLCHAIN")
+
+    compiler_info = {}
+
+    ascii_strs = {s for _, s in extract_ascii_strings(data, 6)}
+
+    if any("Mingw" in s or "mingw" in s for s in ascii_strs):
+        compiler_info["compiler"] = "MinGW-w64 (GCC cross-compiler)"
+        warn("MinGW-w64 — commonly used to cross-compile Windows malware from Linux")
+    elif any("MSVC" in s or "Rich" in s for s in ascii_strs):
+        compiler_info["compiler"] = "MSVC (Visual Studio)"
+    elif any("Borland" in s for s in ascii_strs):
+        compiler_info["compiler"] = "Borland/Embarcadero"
+    elif any("Go build" in s or "runtime.go" in s for s in ascii_strs):
+        compiler_info["compiler"] = "Go"
+
+    if any("gcc.gnu.org" in s for s in ascii_strs):
+        compiler_info["gcc_references"] = True
+        info("References to gcc.gnu.org found — GCC-compiled")
+
+    # Language hints from error messages
+    wide_strs = {s for _, s in extract_wide_strings(data, 4)}
+    all_strs = ascii_strs | wide_strs
+
+    languages = set()
+    if any("ERREUR" in s for s in all_strs):
+        languages.add("French")
+    if any("Fehler" in s for s in all_strs):
+        languages.add("German")
+    if any("ошибка" in s.lower() for s in all_strs):
+        languages.add("Russian")
+
+    if languages:
+        compiler_info["developer_languages"] = list(languages)
+        for lang in languages:
+            warn(f"Developer language hint: {lang}")
+
+    if compiler_info.get("compiler"):
+        detail("Compiler", compiler_info["compiler"])
+
+    return compiler_info
+
+
+
+
+def generate_report(filepath: Path, all_results: dict):
+    """Write JSON report to disk."""
+    report_path = filepath.parent / f"{filepath.stem}_analysis.json"
+    with open(report_path, "w") as f:
+        json.dump(all_results, f, indent=2, default=str)
+    heading("REPORT SAVED")
+    info(f"JSON report: {report_path}")
+
+
+# ─── Main ────────────────────────────────────────────────────────────────────
+
+def main():
+    if len(sys.argv) < 2:
+        print(f"Usage: {sys.argv[0]} <pe_file> [--json]")
+        sys.exit(1)
+
+    filepath = Path(sys.argv[1])
+    save_json = "--json" in sys.argv
+
+    if not filepath.exists():
+        print(f"[!] File not found: {filepath}")
+        sys.exit(1)
+
+    with open(filepath, "rb") as f:
+        data = f.read()
+
+    # Verify it's a PE
+    if data[:2] != b'MZ':
+        print("[!] Not a PE file (missing MZ header)")
+        sys.exit(1)
+
+    try:
+        pe = pefile.PE(data=data)
+    except pefile.PEFormatError as e:
+        print(f"[!] Failed to parse PE: {e}")
+        sys.exit(1)
+
+    print(f"{C.BOLD}{C.MAGENTA}")
+    print("╔══════════════════════════════════════════════════════════════════════╗")
+    print("║                    PE BINARY STATIC ANALYZER                       ║")
+    print("╚══════════════════════════════════════════════════════════════════════╝")
+    print(C.RESET)
+
+    # Pre-extract strings for reuse
+    ascii_raw = extract_ascii_strings(data, min_len=4)
+    wide_raw = extract_wide_strings(data, min_len=4)
+    ascii_set = {s for _, s in ascii_raw}
+    wide_set = {s for _, s in wide_raw}
+
+    # Run structural analyses
+    results = {}
+    results["hashes"] = analyze_hashes(filepath, data)
+    results["pe_headers"] = analyze_pe_headers(pe)
+    results["sections"] = analyze_sections(pe)
+    results["imports"] = analyze_imports(pe)
+    results["exports"] = analyze_exports(pe)
+    results["resources"] = analyze_resources(pe)
+    results["version_info"] = analyze_version_info(pe)
+    results["tls"] = analyze_tls(pe)
+    results["compiler"] = analyze_compiler(data, pe)
+    results["strings"] = analyze_strings(data)
+    results["dynamic_apis"] = analyze_dynamic_apis(data)
+
+    # Build context for rule engine
+    ctx = build_context(
+        data=data, pe=pe,
+        imports=results["imports"],
+        string_findings=results["strings"],
+        sections=results["sections"],
+        version_info=results["version_info"],
+        dynamic_apis=results["dynamic_apis"],
+        ascii_strs=ascii_set,
+        wide_strs=wide_set,
+    )
+
+    # Run behavioral rules and IOC extraction
+    behaviors = run_behavioral_rules(ctx)
+    results["behavior"] = {"behaviors": behaviors}
+    results["iocs"] = run_ioc_extractors(ctx)
+
+    # External tool analysis
+    results["capa"] = run_capa_analysis(filepath)
+    results["yara"] = run_yara_scan(data)
+
+    # Final verdict (combines all three sources)
+    classify(behaviors, results["capa"], results["yara"])
+
+    if save_json:
+        # Convert non-serializable items for JSON
+        results["strings"] = {
+            k: [{"value": i["value"], "encoding": i["encoding"]} for i in v]
+            for k, v in results["strings"].items()
+        }
+        generate_report(filepath, results)
+
+    print()
+
+
+if __name__ == "__main__":
+    main()
