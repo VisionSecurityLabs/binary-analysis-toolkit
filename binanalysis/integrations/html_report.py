@@ -637,6 +637,142 @@ def _render_llm(results: dict) -> str:
 """
 
 
+def _render_exports(results: dict) -> str:
+    exports: list = results.get("format_specific", {}).get("exports", [])
+    if not exports:
+        return ""
+    tags = "".join(f'<span class="tag mono">{_e(e)}</span>' for e in exports)
+    return f"""
+<details class="section">
+  <summary>
+    <span class="section-title">Exports</span>
+    <span style="display:flex;align-items:center;gap:8px">
+      <span class="section-badge">{len(exports)}</span>
+      <span class="chevron">&#9654;</span>
+    </span>
+  </summary>
+  <div class="section-body"><div class="tag-list">{tags}</div></div>
+</details>
+"""
+
+
+def _render_resources(results: dict) -> str:
+    resources: dict = results.get("format_specific", {}).get("resources", {})
+    if not resources:
+        return ""
+    rows = "".join(
+        f'<tr><td class="mono">{_e(name)}</td>'
+        f'<td class="mono" style="color:#8b949e">{_e(meta.get("type_name",""))}</td>'
+        f'<td class="mono" style="color:#6e7681">{_e(meta.get("type_id",""))}</td></tr>'
+        for name, meta in resources.items()
+    )
+    return f"""
+<details class="section">
+  <summary>
+    <span class="section-title">Resources</span>
+    <span style="display:flex;align-items:center;gap:8px">
+      <span class="section-badge">{len(resources)}</span>
+      <span class="chevron">&#9654;</span>
+    </span>
+  </summary>
+  <div class="section-body">
+    <table>
+      <thead><tr><th>Name</th><th>Type</th><th>ID</th></tr></thead>
+      <tbody>{rows}</tbody>
+    </table>
+  </div>
+</details>
+"""
+
+
+def _render_version_info(results: dict) -> str:
+    version: dict = results.get("format_specific", {}).get("version_info", {})
+    if not version:
+        return ""
+    rows = "".join(
+        f'<tr><td style="color:#8b949e;width:180px">{_e(k)}</td>'
+        f'<td class="mono">{_e(v)}</td></tr>'
+        for k, v in version.items()
+    )
+    return f"""
+<details class="section">
+  <summary>
+    <span class="section-title">Version Info</span>
+    <span class="chevron">&#9654;</span>
+  </summary>
+  <div class="section-body"><table>{rows}</table></div>
+</details>
+"""
+
+
+def _render_tls(results: dict) -> str:
+    tls: dict = results.get("format_specific", {}).get("tls", {})
+    if not tls or not tls.get("callback_address"):
+        return ""
+    return f"""
+<details class="section">
+  <summary>
+    <span class="section-title">TLS Callbacks</span>
+    <span style="display:flex;align-items:center;gap:8px">
+      <span class="sev sev-high">SUSPICIOUS</span>
+      <span class="chevron">&#9654;</span>
+    </span>
+  </summary>
+  <div class="section-body">
+    <div style="color:#e3b341;font-size:13px">
+      TLS callback table at <span class="mono">{_e(tls["callback_address"])}</span>
+      — may execute code before entry point
+    </div>
+  </div>
+</details>
+"""
+
+
+def _render_compiler(results: dict) -> str:
+    compiler: dict = results.get("format_specific", {}).get("compiler", {})
+    if not compiler:
+        return ""
+    fields = [
+        ("Compiler", compiler.get("compiler")),
+        ("Developer Languages", ", ".join(compiler.get("developer_languages", []))),
+        ("GCC References", "Yes" if compiler.get("gcc_references") else None),
+    ]
+    rows = "".join(
+        f'<tr><td style="color:#8b949e;width:180px">{_e(k)}</td><td class="mono">{_e(v)}</td></tr>'
+        for k, v in fields if v
+    )
+    if not rows:
+        return ""
+    return f"""
+<details class="section">
+  <summary>
+    <span class="section-title">Compiler / Toolchain</span>
+    <span class="chevron">&#9654;</span>
+  </summary>
+  <div class="section-body"><table>{rows}</table></div>
+</details>
+"""
+
+
+def _render_dynamic_apis(results: dict) -> str:
+    apis: list = results.get("generic", {}).get("dynamic_apis", [])
+    if not apis:
+        return ""
+    tags = "".join(f'<span class="tag mono" style="color:#ff7b72">{_e(a)}</span>' for a in apis)
+    return f"""
+<details class="section">
+  <summary>
+    <span class="section-title">Dynamically Resolved APIs</span>
+    <span style="display:flex;align-items:center;gap:8px">
+      <span class="section-badge">{len(apis)}</span>
+      <span class="chevron">&#9654;</span>
+    </span>
+  </summary>
+  <div class="section-body"><div class="tag-list">{tags}</div></div>
+</details>
+"""
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -654,7 +790,13 @@ def save_html_report(results: dict, filepath: Path) -> Path:
         + _render_findings(behaviors, capa, yara)
         + _render_pe_headers(results)
         + _render_imports(results)
+        + _render_exports(results)
+        + _render_resources(results)
+        + _render_version_info(results)
+        + _render_tls(results)
+        + _render_compiler(results)
         + _render_strings(results)
+        + _render_dynamic_apis(results)
         + _render_iocs(results)
         + _render_capa(results)
         + _render_yara(results)
