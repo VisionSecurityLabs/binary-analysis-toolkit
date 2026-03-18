@@ -10,7 +10,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from binanalysis.output import heading, info, warn
+from binanalysis.output import heading, info
 
 
 def try_unpack_upx(filepath: Path) -> Path | None:

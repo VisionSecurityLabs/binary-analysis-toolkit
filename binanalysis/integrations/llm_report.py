@@ -6,7 +6,7 @@ import urllib.request
 import urllib.error
 from pathlib import Path
 
-from binanalysis.output import heading, subheading, info, warn, detail
+from binanalysis.output import heading, subheading, info, warn
 
 logger = logging.getLogger(__name__)
 

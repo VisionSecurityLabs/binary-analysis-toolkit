@@ -12,7 +12,7 @@ from binanalysis.formats.pe.analysis import (
     analyze_tls, analyze_compiler,
 )
 from binanalysis.formats.pe.rules import PE_RULES
-from binanalysis.output import heading, detail
+from binanalysis.output import heading
 
 
 def analyze_pe(filepath: Path, data: bytes, generic_results: dict) -> PEContext:

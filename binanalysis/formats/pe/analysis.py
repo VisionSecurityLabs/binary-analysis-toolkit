@@ -1,6 +1,5 @@
 """Structural PE analysis — headers, sections, imports, exports, resources, TLS, compiler."""
 
-import re
 import datetime
 
 import pefile
