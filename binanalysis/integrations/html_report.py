@@ -91,7 +91,7 @@ a { color: #58a6ff; text-decoration: none; }
 /* ── Tables ── */
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th { text-align: left; padding: 8px 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #8b949e; border-bottom: 1px solid #30363d; }
-td { padding: 7px 10px; border-bottom: 1px solid #21262d; vertical-align: top; }
+td { padding: 7px 10px; border-bottom: 1px solid #21262d; vertical-align: top; word-break: break-word; }
 tr:last-child td { border-bottom: none; }
 tr:hover td { background: #1c2128; }
 .mono { font-family: monospace; font-size: 12px; }
@@ -316,8 +316,8 @@ def _render_findings(behaviors: list[dict], capa: list[dict], yara: list[dict]) 
   </div>
   <div class="section-body">
     <div id="findings-empty" class="search-empty">No matching findings.</div>
-    <table id="findings-table">
-      <thead><tr><th>Severity</th><th>Type</th><th>Description</th><th>Detail</th></tr></thead>
+    <table id="findings-table" style="table-layout:fixed">
+      <thead><tr><th style="width:100px">Severity</th><th style="width:70px">Type</th><th>Description</th><th style="width:160px">Detail</th></tr></thead>
       <tbody>{table_rows}</tbody>
     </table>
   </div>
