@@ -6,13 +6,17 @@ requires-python = ">=3.10"
 dependencies = [
     "pefile",
     "yara-python",
+    "pyyaml",
+    "flare-capa",
 ]
 
 [project.optional-dependencies]
-capa = ["flare-capa"]
 dotnet = ["dnfile"]
 decompile = ["r2pipe"]
-all = ["flare-capa", "dnfile", "r2pipe"]
+all = ["dnfile", "r2pipe"]
+
+[tool.hatch.build.targets.wheel]
+include = ["binanalysis/**"]
 
 [build-system]
 requires = ["hatchling"]

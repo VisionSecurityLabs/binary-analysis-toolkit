@@ -34,18 +34,16 @@ name = "binanalysis"
 version = "0.2.0"
 source = { editable = "." }
 dependencies = [
+    { name = "flare-capa" },
     { name = "pefile" },
+    { name = "pyyaml" },
     { name = "yara-python" },
 ]
 
 [package.optional-dependencies]
 all = [
     { name = "dnfile" },
-    { name = "flare-capa" },
     { name = "r2pipe" },
-]
-capa = [
-    { name = "flare-capa" },
 ]
 decompile = [
     { name = "r2pipe" },
@@ -58,14 +56,14 @@ dotnet = [
 requires-dist = [
     { name = "dnfile", marker = "extra == 'all'" },
     { name = "dnfile", marker = "extra == 'dotnet'" },
-    { name = "flare-capa", marker = "extra == 'all'" },
-    { name = "flare-capa", marker = "extra == 'capa'" },
+    { name = "flare-capa" },
     { name = "pefile" },
+    { name = "pyyaml" },
     { name = "r2pipe", marker = "extra == 'all'" },
     { name = "r2pipe", marker = "extra == 'decompile'" },
     { name = "yara-python" },
 ]
-provides-extras = ["capa", "dotnet", "decompile", "all"]
+provides-extras = ["dotnet", "decompile", "all"]
 
 [[package]]
 name = "cachetools"

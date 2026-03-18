@@ -264,7 +264,7 @@ binanalysis [-h] [--json] [--decompile {r2,ghidra,both}]
 | `--llm-url` | LLM API base URL (default: `http://localhost:11434`) |
 | `--llm-model` | LLM model name (default: `llama3`) |
 | `--llm-timeout` | LLM request timeout in seconds (default: 300) |
-| `--config` | Path to a TOML configuration file (see below) |
+| `--config` | Path to a YAML configuration file (see below) |
 | `--no-color` | Disable colored terminal output (useful for piping to files or other tools) |
 | `--quiet` | Show only the final verdict and critical findings |
 | `--debug` | Save LLM prompt to file for inspection |
@@ -273,79 +273,79 @@ binanalysis [-h] [--json] [--decompile {r2,ghidra,both}]
 
 ## Configuration File
 
-For settings you use repeatedly, create a TOML configuration file instead of passing flags every time. The tool looks for configuration in this order:
+For settings you use repeatedly, create a YAML configuration file instead of passing flags every time. The tool looks for configuration in this order:
 
 1. Path passed via `--config`
-2. `binanalysis.toml` in the current directory
-3. `~/.config/binanalysis/config.toml`
+2. `binanalysis.yaml` in the current directory
+3. `~/.config/binanalysis/config.yaml`
 
-A default configuration file is automatically created at `~/.config/binanalysis/config.toml` on first run. The configuration includes:
+A default configuration file is automatically created at `~/.config/binanalysis/config.yaml` on first run. The configuration includes:
 
-```toml
-[paths]
-# Where capa rules are stored (auto-downloaded here if missing)
-capa_rules = "~/.local/share/binanalysis/capa-rules"
-# capa rules git repo (change to a mirror or fork if needed)
-capa_rules_repo = "https://github.com/mandiant/capa-rules.git"
-# Where community YARA rules are stored
-yara_community_dir = "~/.local/share/binanalysis/yara-rules"
-# Additional YARA rule directories scanned on every run
-# yara_extra_dirs = ["/path/to/rules"]
-# Path to Ghidra headless analyzer (auto-discovered if empty)
-# ghidra_headless = ""
+```yaml
+paths:
+  # Where capa rules are stored (auto-downloaded here if missing)
+  capa_rules: ~/.local/share/binanalysis/capa-rules
+  # Where community YARA rules are stored (fetched via --update-yara)
+  yara_community_dir: ~/.local/share/binanalysis/yara-rules
+  # Additional YARA rule directories scanned on every run
+  # yara_extra_dirs:
+  #   - /path/to/rules
+  # Path to Ghidra headless analyzer (auto-discovered if empty)
+  # ghidra_headless: ""
+
+# capa rule repos cloned/updated by --update-capa.
+capa_repos:
+  capa-rules:
+    repo: https://github.com/mandiant/capa-rules.git
+    description: "Official capa rules (Mandiant/Google)"
 
 # Community YARA repos cloned/updated by --update-yara.
-# subdir = subdirectory within the repo that contains .yar files ("." = repo root).
+# subdir: subdirectory within the repo that contains .yar files ("." = repo root).
 # Comment out or remove any repos you don't want.
+yara_repos:
+  signature-base:
+    repo: https://github.com/Neo23x0/signature-base.git
+    subdir: yara
+    description: "Cobalt Strike, Go implants, webshells (Neo23x0)"
+  yara-rules:
+    repo: https://github.com/Yara-Rules/rules.git
+    subdir: "."
+    description: "Broad malware families, packers, exploits"
+  gcti:
+    repo: https://github.com/chronicle/GCTI.git
+    subdir: YARA
+    description: "APT-focused, high quality (Google)"
+  reversinglabs:
+    repo: https://github.com/reversinglabs/reversinglabs-yara-rules.git
+    subdir: yara
+    description: "Large malware family signature set"
+  eset:
+    repo: https://github.com/eset/malware-ioc.git
+    subdir: "."
+    description: "ESET research publications"
+  elastic:
+    repo: https://github.com/elastic/protections-artifacts.git
+    subdir: yara/rules
+    description: "Elastic threat research"
 
-[yara_repos.signature-base]
-repo = "https://github.com/Neo23x0/signature-base.git"
-subdir = "yara"
-description = "Cobalt Strike, Go implants, webshells (Neo23x0)"
+features:
+  capa: false   # opt-in via --capa flag (slow, downloads ~100MB rules on first use)
+  yara: false   # opt-in via --yara flag (auto-downloads community rules on first use)
+  # decompile: ""  # "", "r2", "ghidra", or "both"
 
-[yara_repos.yara-rules]
-repo = "https://github.com/Yara-Rules/rules.git"
-subdir = "."
-description = "Broad malware families, packers, exploits"
+output:
+  no_color: false
+  quiet: false
+  json: false
 
-[yara_repos.gcti]
-repo = "https://github.com/chronicle/GCTI.git"
-subdir = "YARA"
-description = "APT-focused, high quality (Google)"
-
-[yara_repos.reversinglabs]
-repo = "https://github.com/reversinglabs/reversinglabs-yara-rules.git"
-subdir = "yara"
-description = "Large malware family signature set"
-
-[yara_repos.eset]
-repo = "https://github.com/eset/malware-ioc.git"
-subdir = "."
-description = "ESET research publications"
-
-[yara_repos.elastic]
-repo = "https://github.com/elastic/protections-artifacts.git"
-subdir = "yara/rules"
-description = "Elastic threat research"
-
-[features]
-capa = false  # opt-in via --capa flag (slow, downloads ~100MB rules on first use)
-yara = false  # opt-in via --yara flag (auto-downloads community rules on first use)
-# decompile = ""  # "", "r2", "ghidra", or "both"
-
-[output]
-no_color = false
-quiet = false
-json = false
-
-[llm]
-url = "http://localhost:11434"
-model = "llama3"
-timeout = 300
-report = false
+llm:
+  url: http://localhost:11434
+  model: llama3
+  timeout: 300
+  report: false
 ```
 
-CLI flags always override config file settings. For example, `--capa` will enable capa even if the config file sets `capa = false`. You can customize repository URLs in the `[yara_repos]` section (e.g., for mirrors or private forks).
+CLI flags always override config file settings. For example, `--capa` will enable capa even if the config file sets `capa: false`. You can customize repository URLs in the `yara_repos` section (e.g., for mirrors or private forks).
 
 ---
 
@@ -570,7 +570,7 @@ Behavioral rules reference categories via `ctx.has_finding("category_name")`.
 Place `.yar` or `.yara` files in `binanalysis/yara_rules/` for bundled rules, or configure custom directories:
 
 - Via `--yara-rules` CLI flag
-- Via `yara_extra_dirs` in `~/.config/binanalysis/config.toml`
+- Via `yara_extra_dirs` in `~/.config/binanalysis/config.yaml`
 - Community rules are auto-downloaded to `~/.local/share/binanalysis/yara-rules` when using `--yara`
 
 ### Adding IOC Extractors

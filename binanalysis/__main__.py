@@ -88,7 +88,7 @@ def main():
     settings = build_settings(args)
 
     if getattr(args, "update_capa", False):
-        update_capa_rules(rules_path=settings.capa_rules, repo=settings.capa_rules_repo)
+        update_capa_rules(rules_path=settings.capa_rules, repos=settings.capa_repos)
 
     if getattr(args, "update_yara", False):
         download_community_rules(community_dir=settings.yara_community_dir,
@@ -154,7 +154,8 @@ def main():
 
     # Integrations
     if settings.run_capa:
-        capa_results = run_capa_analysis(filepath, rules_path=settings.capa_rules)
+        capa_results = run_capa_analysis(filepath, rules_path=settings.capa_rules,
+                                         repos=settings.capa_repos)
     else:
         capa_results = []
 

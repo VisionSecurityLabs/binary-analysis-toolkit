@@ -1,6 +1,7 @@
 """capa integration — capability detection with ATT&CK mapping."""
 
 import io
+import shutil
 import subprocess
 import sys
 import logging
@@ -19,42 +20,53 @@ except ImportError:
 from binanalysis.settings import _DEFAULT_CAPA_RULES
 DEFAULT_CAPA_RULES = _DEFAULT_CAPA_RULES
 
-_DEFAULT_CAPA_REPO = "https://github.com/mandiant/capa-rules.git"
+_DEFAULT_CAPA_REPOS: dict = {
+    "capa-rules": {"repo": "https://github.com/mandiant/capa-rules.git"},
+}
 
 
-def update_capa_rules(rules_path: Path | None = None, repo: str | None = None) -> bool:
-    """Clone or pull capa rules. Returns True on success."""
-    import shutil
-    target = rules_path or DEFAULT_CAPA_RULES
-    url = repo or _DEFAULT_CAPA_REPO
+def update_capa_rules(rules_path: Path | None = None, repos: dict | None = None) -> bool:
+    """Clone or pull capa rule repos into rules_path. Returns True if all succeeded."""
+    target_base = rules_path or DEFAULT_CAPA_RULES
+    repo_map = repos if repos else _DEFAULT_CAPA_REPOS
 
     if not shutil.which("git"):
         warn("git not found in PATH — cannot download capa rules")
         return False
 
-    if target.exists():
-        info(f"Updating capa rules at {target}...")
-        result = subprocess.run(
-            ["git", "-C", str(target), "pull", "--ff-only"],
-            capture_output=True, text=True, timeout=120,
-        )
-    else:
-        info(f"Downloading capa rules to {target}...")
-        target.parent.mkdir(parents=True, exist_ok=True)
-        result = subprocess.run(
-            ["git", "clone", "--depth", "1", url, str(target)],
-            capture_output=True, text=True,
-        )
+    target_base.parent.mkdir(parents=True, exist_ok=True)
+    success = True
 
-    if result.returncode != 0:
-        warn(f"Failed: {result.stderr.strip()}")
-        return False
+    for name, meta in repo_map.items():
+        url = meta["repo"] if isinstance(meta, dict) else meta
+        desc = meta.get("description", "") if isinstance(meta, dict) else ""
+        label = f"{name}  ({desc})" if desc else name
+        target_dir = target_base  # capa uses a single rules dir, not per-repo subdirs
 
-    info("capa rules up to date")
-    return True
+        if target_dir.exists():
+            info(f"Updating: {label}")
+            result = subprocess.run(
+                ["git", "-C", str(target_dir), "pull", "--ff-only"],
+                capture_output=True, text=True, timeout=120,
+            )
+        else:
+            info(f"Cloning: {label}")
+            result = subprocess.run(
+                ["git", "clone", "--depth", "1", url, str(target_dir)],
+                capture_output=True, text=True,
+            )
+
+        if result.returncode != 0:
+            warn(f"Failed {name}: {result.stderr.strip()}")
+            success = False
+        else:
+            info(f"capa rules up to date: {label}")
+
+    return success
 
 
-def run_capa_analysis(filepath: Path, rules_path: Path | None = None) -> list[dict]:
+def run_capa_analysis(filepath: Path, rules_path: Path | None = None,
+                      repos: dict | None = None) -> list[dict]:
     """Run capa capability detection on a PE binary.
     Returns a list of capability dicts with name, ATT&CK mapping, and namespace."""
     if not HAS_CAPA:
@@ -64,8 +76,10 @@ def run_capa_analysis(filepath: Path, rules_path: Path | None = None) -> list[di
     rules_path = rules_path or DEFAULT_CAPA_RULES
     if not rules_path.exists():
         info(f"capa rules not found at {rules_path} — downloading now...")
-        if not update_capa_rules(rules_path):
-            info(f"Manual fix: git clone --depth 1 {_DEFAULT_CAPA_REPO} {rules_path}")
+        if not update_capa_rules(rules_path, repos):
+            repo_url = (repos or _DEFAULT_CAPA_REPOS).get(
+                "capa-rules", {}).get("repo", "")
+            info(f"Manual fix: git clone --depth 1 {repo_url} {rules_path}")
             return []
 
     heading("CAPA CAPABILITY DETECTION")
