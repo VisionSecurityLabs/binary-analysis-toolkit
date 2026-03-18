@@ -243,7 +243,7 @@ def main():
     # Banner
     print(f"{C.BOLD}{C.MAGENTA}")
     print("╔══════════════════════════════════════════════════════════════════════╗")
-    print("║                    PE BINARY STATIC ANALYZER                       ║")
+    print("║                   BINARY ANALYSIS TOOLKIT (BAT)                    ║")
     print("╚══════════════════════════════════════════════════════════════════════╝")
     print(C.RESET)
 

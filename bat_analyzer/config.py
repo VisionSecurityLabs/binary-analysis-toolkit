@@ -145,9 +145,15 @@ SUSPICIOUS_STRING_PATTERNS = [
     StringPattern(r'sso_nonce', "sso_nonce", 4),
     StringPattern(r'client_id=[^\x00\s&]+', "client_id", 2),
     StringPattern(r'redirect_uri=[^\x00\s&]+', "redirect_uri", 2),
-    StringPattern(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', "uuid", 2),
+    StringPattern(
+        r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', "uuid", 2,
+        requires=["ms_oauth", "com", "browser_data", "discord_data"],
+    ),
     # ── File system ──
-    StringPattern(r'C:\\[^\x00]{5,}', "windows_path", 2),
+    StringPattern(
+        r'C:\\[^\x00]{5,}', "windows_path", 2,
+        requires=["browser_path", "temp_drop_path", "driver_path", "crypto_wallet_path", "shell_command"],
+    ),
     StringPattern(
         r'%[A-Z]+%', "env_variable", 2,
         requires=["temp_drop_path", "shell_command", "recon_command"],
@@ -157,10 +163,22 @@ SUSPICIOUS_STRING_PATTERNS = [
         requires=["browser_path", "browser_data", "persistence", "driver_registry", "vpn_credentials"],
     ),
     # ── JSON structures ──
-    StringPattern(r'\{"[a-z_]+":', "json_object", 2),
-    StringPattern(r'"message":', "json_message_key", 2),
-    StringPattern(r'"content":', "json_content_key", 2),
-    StringPattern(r'"branch":', "json_branch_key", 2),
+    StringPattern(
+        r'\{"[a-z_]+":', "json_object", 2,
+        requires=["url", "github_api", "user_agent", "discord_webhook", "telegram_bot_api"],
+    ),
+    StringPattern(
+        r'"message":', "json_message_key", 2,
+        requires=["url", "github_api", "user_agent"],
+    ),
+    StringPattern(
+        r'"content":', "json_content_key", 2,
+        requires=["url", "github_api", "github_contents_path"],
+    ),
+    StringPattern(
+        r'"branch":', "json_branch_key", 2,
+        requires=["github_api", "github_repo_path"],
+    ),
     # ── Recon ──
     StringPattern(
         r'whoami|systeminfo|ipconfig|hostname|tasklist|wmic', "recon_command", 4,
