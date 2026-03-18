@@ -93,7 +93,7 @@ def parse_args():
     parser.add_argument("--config", type=Path, help="Path to config YAML file")
     parser.add_argument("--capa-rules", type=Path, help="Path to capa rules directory")
     parser.add_argument("--yara-rules", type=Path, nargs="+", help="Additional YARA rule directories")
-    parser.add_argument("--report", action="store_true", help="Generate LLM-powered analyst report (requires Ollama or compatible API)")
+    parser.add_argument("--llm-report", action="store_true", help="Generate LLM-powered analyst report (requires Ollama or compatible API)")
     parser.add_argument("--llm-url", type=str, help="LLM API base URL (default: http://localhost:11434)")
     parser.add_argument("--llm-model", type=str, help="LLM model name (default: llama3)")
     parser.add_argument("--llm-timeout", type=int, help="LLM request timeout in seconds (default: 300)")
@@ -148,7 +148,7 @@ def build_settings(args) -> Settings:
         llm_url=getattr(args, "llm_url", None) or llm_cfg.get("url", "http://localhost:11434"),
         llm_model=getattr(args, "llm_model", None) or llm_cfg.get("model", "llama3"),
         llm_timeout=getattr(args, "llm_timeout", None) or llm_cfg.get("timeout", 300),
-        run_report=getattr(args, "report", False) or llm_cfg.get("report", False),
+        run_report=getattr(args, "llm_report", False) or llm_cfg.get("report", False),
         debug=getattr(args, "debug", False),
     )
 
