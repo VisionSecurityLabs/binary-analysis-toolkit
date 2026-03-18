@@ -3,6 +3,7 @@ name = "binanalysis"
 version = "0.2.0"
 description = "Binary Analysis Toolkit — multi-format static analyzer with behavioral rules, YARA, capa, and LLM report generation"
 license = { text = "MIT" }
+authors = [{name = "Vision Security Labs"}]
 requires-python = ">=3.10"
 dependencies = [
     "pefile",
