@@ -1,0 +1,22 @@
+.DS_Store
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+
+binary_process/
+results/
+
+# Pipeline — downloaded malware samples
+samples/
+*.exe
+enrichment_report.json
+batch_summary.json
+.env

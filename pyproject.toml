@@ -1,0 +1,28 @@
+[project]
+name = "binanalysis"
+version = "0.1.0"
+description = "Binary Analysis Toolkit — multi-format static analyzer with behavioral rules, YARA, capa, and LLM report generation"
+license = { text = "MIT" }
+authors = [{name = "Vision Security Labs"}]
+requires-python = ">=3.10"
+dependencies = [
+    "pefile",
+    "yara-python",
+    "pyyaml",
+    "flare-capa",
+    "dnfile",
+    "r2pipe",
+    "requests",
+    "python-dotenv",
+    "pyzipper",
+]
+
+[tool.hatch.build.targets.wheel]
+include = ["binanalysis/**"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project.scripts]
+binanalysis = "binanalysis.__main__:main"
