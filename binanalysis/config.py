@@ -47,7 +47,7 @@ SUSPICIOUS_STRING_PATTERNS = [
     StringPattern(r'redirect_uri=[^\x00\s&]+', "redirect_uri", 2),
     StringPattern(
         r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', "uuid", 2,
-        requires=["ms_oauth", "com", "browser_data", "discord_data"],
+        requires=["ms_oauth", "domain", "browser_data", "discord_data"],
     ),
     # ── File system ──
     StringPattern(
