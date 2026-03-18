@@ -118,6 +118,7 @@ def main():
     print(f"{C.BOLD}{C.MAGENTA}")
     print("╔══════════════════════════════════════════════════════════════════════╗")
     print("║                   STATIC BINARY ANALYZER                           ║")
+    print("║                                          Vision Security Labs       ║")
     print("╚══════════════════════════════════════════════════════════════════════╝")
     print(C.RESET)
 
