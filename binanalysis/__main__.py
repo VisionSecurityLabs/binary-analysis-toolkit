@@ -13,6 +13,7 @@ from binanalysis.formats import detect_format
 from binanalysis.settings import parse_args, build_settings
 from binanalysis.integrations.unpacker import try_unpack_upx
 from binanalysis.integrations.llm_report import generate_llm_report
+from binanalysis.integrations.html_report import save_html_report
 
 # Import format backends to trigger registration
 import binanalysis.formats.pe  # noqa: F401
@@ -186,6 +187,8 @@ def main():
             "yara": yara_results,
         }
         generate_report(filepath, results)
+        html_path = save_html_report(results, filepath)
+        info(f"HTML report: {html_path}")
 
         if settings.run_report:
             generate_llm_report(results, filepath,
