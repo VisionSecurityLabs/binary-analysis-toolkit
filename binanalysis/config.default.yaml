@@ -1,0 +1,66 @@
+# binanalysis configuration — edit to customize defaults
+# Copied to ~/.config/binanalysis/config.yaml on first run.
+# All values here are overridable via CLI flags.
+
+paths:
+  # Where capa rules are stored (auto-downloaded here if missing)
+  capa_rules: ~/.local/share/binanalysis/capa-rules
+  # Where community YARA rules are stored (fetched via --update-yara)
+  yara_community_dir: ~/.local/share/binanalysis/yara-rules
+  # Additional YARA rule directories scanned on every run
+  # yara_extra_dirs:
+  #   - /path/to/rules
+  # Path to Ghidra headless analyzer (auto-discovered if empty)
+  # ghidra_headless: ""
+
+# capa rule repos cloned/updated by --update-capa.
+# Comment out or remove any repos you don't want.
+capa_repos:
+  capa-rules:
+    repo: https://github.com/mandiant/capa-rules.git
+    description: "Official capa rules (Mandiant/Google)"
+
+# Community YARA repos cloned/updated by --update-yara.
+# subdir: subdirectory within the repo that contains .yar files ("." = repo root).
+# Comment out or remove any repos you don't want.
+yara_repos:
+  signature-base:
+    repo: https://github.com/Neo23x0/signature-base.git
+    subdir: yara
+    description: "Cobalt Strike, Go implants, webshells (Neo23x0)"
+  yara-rules:
+    repo: https://github.com/Yara-Rules/rules.git
+    subdir: "."
+    description: "Broad malware families, packers, exploits"
+  gcti:
+    repo: https://github.com/chronicle/GCTI.git
+    subdir: YARA
+    description: "APT-focused, high quality (Google)"
+  reversinglabs:
+    repo: https://github.com/reversinglabs/reversinglabs-yara-rules.git
+    subdir: yara
+    description: "Large malware family signature set"
+  eset:
+    repo: https://github.com/eset/malware-ioc.git
+    subdir: "."
+    description: "ESET research publications"
+  elastic:
+    repo: https://github.com/elastic/protections-artifacts.git
+    subdir: yara/rules
+    description: "Elastic threat research"
+
+features:
+  capa: false   # opt-in via --capa flag (slow, downloads ~100MB rules on first use)
+  yara: false   # opt-in via --yara flag (auto-downloads community rules on first use)
+  # decompile: ""  # "", "r2", "ghidra", or "both"
+
+output:
+  no_color: false
+  quiet: false
+  json: false
+
+llm:
+  url: http://ollama:11434
+  model: qwen3.5
+  timeout: 600
+  report: false
