@@ -1,17 +1,19 @@
 """
 Run the full malware collection and detection enrichment pipeline.
 
-Orchestrates all 4 stages:
+Orchestrates all 5 stages:
   1. Collect samples from MalwareBazaar by tag
   2. Batch-analyze samples with binanalysis
   3. Aggregate results into an enrichment report
   4. Auto-generate detection rules from the report
+  5. Validate generated rules against known-clean files
 
 Usage:
     uv run python pipeline/run.py --tags AgentTesla --limit 50
     uv run python pipeline/run.py --tags Emotet Remcos --limit 100 --workers 4 --capa --yara
     uv run python pipeline/run.py --skip-collect --samples samples/  # re-run from analysis
     uv run python pipeline/run.py --tags AgentTesla --dry-run        # preview generated rules
+    uv run python pipeline/run.py --tags AgentTesla --clean-dir clean_samples/  # with FP validation
 """
 
 from __future__ import annotations
@@ -46,6 +48,12 @@ def main():
                         help="Minimum corpus prevalence %% for rule generation (default: 20)")
     parser.add_argument("--dry-run", action="store_true",
                         help="Preview generated rules without writing files")
+
+    # Stage 5 — Validate
+    parser.add_argument("--clean-dir", type=Path, default=None,
+                        help="Directory of known-clean PEs for false positive validation")
+    parser.add_argument("--report-only", action="store_true",
+                        help="Report false positives but don't auto-remove rules")
 
     # Flow control
     parser.add_argument("--skip-collect", action="store_true",
@@ -152,6 +160,21 @@ def main():
                 print(f"    Re-run with --skip-collect --skip-generate to verify improved coverage.")
     else:
         print("\n[*] Skipping Stage 4 (--skip-generate)")
+
+    # ── Stage 5: Validate ────────────────────────────────────────────────
+    if args.clean_dir and not args.dry_run and not args.skip_generate:
+        print(f"\n{'='*60}")
+        print(f"  STAGE 5 — Validate Against Clean Files")
+        print(f"{'='*60}")
+        from pipeline.validate_rules import validate
+        result = validate(args.clean_dir, args.report_only)
+        fp_count = len(result.get("false_positives", {}))
+        if fp_count and not args.report_only:
+            print(f"\n[*] {fp_count} false-positive rules were auto-removed.")
+    elif args.clean_dir and args.dry_run:
+        print("\n[*] Skipping Stage 5 (--dry-run mode, no rules written to validate)")
+    elif not args.clean_dir and not args.skip_generate and not args.dry_run:
+        print("\n[*] Tip: use --clean-dir <path> to auto-validate against known-clean PEs")
 
     print(f"\n{'='*60}")
     print(f"  PIPELINE COMPLETE")

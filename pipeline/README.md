@@ -35,8 +35,15 @@ flowchart TD
         D3 & D4 & D5 --> D6[Auto-loaded by\nbinanalysis engine]
     end
 
-    Stage1 --> Stage2 --> Stage3 --> Stage4
-    Stage4 -.->|"re-run to verify\nimproved coverage"| Stage2
+    subgraph Stage5["Stage 5 — Validate"]
+        F1[validate_rules.py] --> F2[Run binanalysis on\nknown-clean PEs]
+        F2 --> F3{Generated rule\nfires?}
+        F3 -->|Yes| F4[Auto-remove\nfalse positive rule]
+        F3 -->|No| F5[Rule passes]
+    end
+
+    Stage1 --> Stage2 --> Stage3 --> Stage4 --> Stage5
+    Stage5 -.->|"re-run to verify\nimproved coverage"| Stage2
 
     subgraph Config["Configuration"]
         E1[".env — API keys\nBAZAAR_AUTH_KEY\nMALSHARE_API_KEY\nVT_API_KEY"]
@@ -54,11 +61,11 @@ flowchart TD
 cp .env.sample .env
 # Edit .env and set BAZAAR_AUTH_KEY
 
-# Run everything: collect → analyze → aggregate → generate rules
-uv run python pipeline/run.py --tags AgentTesla --limit 50
+# Run everything: collect → analyze → aggregate → generate → validate
+uv run python pipeline/run.py --tags AgentTesla --limit 50 --clean-dir clean_samples/
 
 # Multiple families with capa + YARA
-uv run python pipeline/run.py --tags Emotet Remcos AgentTesla --limit 100 --workers 4 --capa --yara
+uv run python pipeline/run.py --tags Emotet Remcos AgentTesla --limit 100 --workers 4 --capa --yara --clean-dir clean_samples/
 
 # Preview generated rules without writing
 uv run python pipeline/run.py --tags AgentTesla --limit 50 --dry-run
@@ -108,13 +115,27 @@ uv run python pipeline/generate_rules.py --report enrichment_report.json --dry-r
 # Generate rule files (auto-loaded by binanalysis on next run)
 uv run python pipeline/generate_rules.py --report enrichment_report.json
 
-# Adjust minimum prevalence threshold (default: 10%)
-uv run python pipeline/generate_rules.py --report enrichment_report.json --min-pct 5
+# Adjust minimum prevalence threshold (default: 20%)
+uv run python pipeline/generate_rules.py --report enrichment_report.json --min-pct 15
 ```
 
 Generated files are auto-loaded by the engine when present:
 - `binanalysis/formats/pe/rules/generated.py` — behavioral rules
+- `binanalysis/formats/pe/rules/generated_specimen.py` — family-specific rules
 - `binanalysis/generated_patterns.py` — string patterns
 - `binanalysis/generated_ioc.py` — IOC extractors
 
-Re-run Stage 2 + 3 after generating to verify improved coverage.
+### Stage 5 — Validate Against Clean Files
+
+```bash
+# Validate and auto-remove false positive rules
+uv run python pipeline/validate_rules.py --clean-dir clean_samples/
+
+# Report only (don't remove rules)
+uv run python pipeline/validate_rules.py --clean-dir clean_samples/ --report-only
+```
+
+Place known-clean PE files (.exe, .dll) in a directory (e.g. `clean_samples/`).
+Any generated rule that fires on a clean file is automatically removed.
+
+Re-run Stage 2 + 3 after validating to verify improved coverage.
