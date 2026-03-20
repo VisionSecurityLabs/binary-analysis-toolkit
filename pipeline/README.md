@@ -48,6 +48,28 @@ flowchart TD
     Config -.-> Stage2
 ```
 
+## Quick Start (full pipeline)
+
+```bash
+cp .env.sample .env
+# Edit .env and set BAZAAR_AUTH_KEY
+
+# Run everything: collect → analyze → aggregate → generate rules
+uv run python pipeline/run.py --tags AgentTesla --limit 50
+
+# Multiple families with capa + YARA
+uv run python pipeline/run.py --tags Emotet Remcos AgentTesla --limit 100 --workers 4 --capa --yara
+
+# Preview generated rules without writing
+uv run python pipeline/run.py --tags AgentTesla --limit 50 --dry-run
+
+# Re-analyze existing samples (skip download)
+uv run python pipeline/run.py --skip-collect --samples samples/
+
+# Only re-aggregate and regenerate (skip download + analysis)
+uv run python pipeline/run.py --skip-collect --skip-analyze --samples samples/
+```
+
 ## Setup
 
 ```bash
