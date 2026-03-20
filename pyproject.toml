@@ -13,6 +13,7 @@ dependencies = [
     "dnfile",
     "r2pipe",
     "requests",
+    "python-dotenv",
 ]
 
 [tool.hatch.build.targets.wheel]

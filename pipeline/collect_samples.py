@@ -22,12 +22,23 @@ from pathlib import Path
 import os
 
 import requests
+from dotenv import load_dotenv
+
+load_dotenv()
 
 BAZAAR_API = os.getenv("BAZAAR_API_URL", "https://mb-api.abuse.ch/api/v1/")
+BAZAAR_AUTH_KEY = os.getenv("BAZAAR_AUTH_KEY", "")
 DEFAULT_OUT = Path(os.getenv("SAMPLES_DIR", "samples"))
 REQUEST_DELAY = 0.5  # seconds between download requests (be a good citizen)
 MAX_SAMPLE_SIZE = 50 * 1024 * 1024  # 50 MB cap on extracted sample size
 _SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
+
+
+def _bazaar_headers() -> dict[str, str]:
+    headers = {}
+    if BAZAAR_AUTH_KEY:
+        headers["Auth-Key"] = BAZAAR_AUTH_KEY
+    return headers
 
 
 def _is_pe(data: bytes) -> bool:
@@ -44,6 +55,7 @@ def query_samples_by_tag(tag: str, limit: int = 100) -> list[dict]:
     """Return sample metadata list from MalwareBazaar for a given tag."""
     resp = requests.post(
         BAZAAR_API,
+        headers=_bazaar_headers(),
         data={"query": "get_taginfo", "tag": tag, "limit": limit},
         timeout=30,
     )
@@ -68,6 +80,7 @@ def download_sample(sha256: str, out_dir: Path) -> Path | None:
     try:
         resp = requests.post(
             BAZAAR_API,
+            headers=_bazaar_headers(),
             data={"query": "get_file", "sha256_hash": sha256},
             timeout=60,
         )

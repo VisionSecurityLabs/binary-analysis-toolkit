@@ -1,0 +1,38 @@
+---
+title: Malware Collection & Detection Enrichment Pipeline
+---
+
+flowchart TD
+    subgraph Stage1["Stage 1 — Collect Samples"]
+        A1[collect_samples.py] -->|"MalwareBazaar API\n(Auth-Key required)"| A2[Query by malware tag]
+        A2 --> A3[Download ZIP archives]
+        A3 --> A4[Extract PE files\nValidate SHA256 + MZ magic\nEnforce 50 MB size cap]
+        A4 --> A5[("samples/*.exe")]
+    end
+
+    subgraph Stage2["Stage 2 — Batch Analyze"]
+        B1[batch_analyze.py] --> B2[Discover *.exe in samples dir]
+        B2 --> B3[Parallel workers\nsubprocess → binanalysis]
+        B3 -->|per sample| B4["*_analysis.json\n*_analysis.html"]
+        B3 --> B5[batch_summary.json]
+    end
+
+    subgraph Stage3["Stage 3 — Aggregate Results"]
+        C1[aggregate_results.py] --> C2[Load *_analysis.json reports]
+        C2 --> C3[Rule coverage stats]
+        C2 --> C4[Uncovered API combos]
+        C2 --> C5[Recurring strings\nURLs / registry keys / mutexes]
+        C2 --> C6[C2 IOC clusters\ndomains / IPs]
+        C3 & C4 & C5 & C6 --> C7[enrichment_report.json]
+    end
+
+    Stage1 --> Stage2 --> Stage3
+
+    subgraph Config["Configuration"]
+        E1[".env — API keys\nBAZAAR_AUTH_KEY\nMALSHARE_API_KEY\nVT_API_KEY"]
+        E2[".env.sample — template"]
+        E3["Env overrides\nSAMPLES_DIR\nBATCH_WORKERS"]
+    end
+
+    Config -.-> Stage1
+    Config -.-> Stage2
