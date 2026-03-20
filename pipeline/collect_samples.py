@@ -113,6 +113,14 @@ def collect(tags: list[str], limit: int, out_dir: Path) -> list[Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
     downloaded: list[Path] = []
     seen: set[str] = set()
+    manifest: dict[str, dict] = {}
+
+    # Load existing manifest if present
+    manifest_path = out_dir / "family_manifest.json"
+    if manifest_path.exists():
+        import json
+        with open(manifest_path) as f:
+            manifest = json.load(f)
 
     for tag in tags:
         print(f"\n[*] Querying MalwareBazaar: tag={tag!r}, limit={limit}")
@@ -129,11 +137,18 @@ def collect(tags: list[str], limit: int, out_dir: Path) -> list[Path]:
             path = download_sample(sha256, out_dir)
             if path:
                 downloaded.append(path)
+                manifest[sha256] = {"family": family, "tag": tag}
                 print(f"    [+] {sha256[:16]}…  {family:20s}  → {path.name}")
             else:
                 print(f"    [-] {sha256[:16]}…  skipped (not PE or error)")
 
             time.sleep(REQUEST_DELAY)
+
+    # Save family manifest
+    import json
+    with open(manifest_path, "w") as f:
+        json.dump(manifest, f, indent=2)
+    print(f"[*] Family manifest → {manifest_path} ({len(manifest)} entries)")
 
     print(f"\n[*] Total downloaded: {len(downloaded)} PE files → {out_dir}/")
     return downloaded

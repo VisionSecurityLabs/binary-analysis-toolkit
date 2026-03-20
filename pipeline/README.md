@@ -27,7 +27,16 @@ flowchart TD
         C3 & C4 & C5 & C6 --> C7[enrichment_report.json]
     end
 
-    Stage1 --> Stage2 --> Stage3
+    subgraph Stage4["Stage 4 — Generate Rules"]
+        D1[generate_rules.py] --> D2[Read enrichment_report.json]
+        D2 --> D3["generated.py\n(behavioral rules)"]
+        D2 --> D4["generated_patterns.py\n(string patterns)"]
+        D2 --> D5["generated_ioc.py\n(IOC extractors)"]
+        D3 & D4 & D5 --> D6[Auto-loaded by\nbinanalysis engine]
+    end
+
+    Stage1 --> Stage2 --> Stage3 --> Stage4
+    Stage4 -.->|"re-run to verify\nimproved coverage"| Stage2
 
     subgraph Config["Configuration"]
         E1[".env — API keys\nBAZAAR_AUTH_KEY\nMALSHARE_API_KEY\nVT_API_KEY"]
@@ -67,3 +76,23 @@ uv run python pipeline/batch_analyze.py --samples samples/ --workers 2 --capa --
 ```bash
 uv run python pipeline/aggregate_results.py --reports samples/ --output enrichment_report.json
 ```
+
+### Stage 4 — Generate Rules
+
+```bash
+# Preview what would be generated
+uv run python pipeline/generate_rules.py --report enrichment_report.json --dry-run
+
+# Generate rule files (auto-loaded by binanalysis on next run)
+uv run python pipeline/generate_rules.py --report enrichment_report.json
+
+# Adjust minimum prevalence threshold (default: 10%)
+uv run python pipeline/generate_rules.py --report enrichment_report.json --min-pct 5
+```
+
+Generated files are auto-loaded by the engine when present:
+- `binanalysis/formats/pe/rules/generated.py` — behavioral rules
+- `binanalysis/generated_patterns.py` — string patterns
+- `binanalysis/generated_ioc.py` — IOC extractors
+
+Re-run Stage 2 + 3 after generating to verify improved coverage.

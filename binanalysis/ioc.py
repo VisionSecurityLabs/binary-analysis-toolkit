@@ -35,3 +35,9 @@ IOC_EXTRACTORS: list[IOCExtractor] = [
     IOCExtractor("env_vars", "Environment Variables", "info",
                  lambda ctx: [i["value"] for i in ctx.string_findings.get("env_variable", [])]),
 ]
+
+try:
+    from binanalysis.generated_ioc import GENERATED_IOC_EXTRACTORS
+    IOC_EXTRACTORS = IOC_EXTRACTORS + GENERATED_IOC_EXTRACTORS
+except ImportError:
+    pass

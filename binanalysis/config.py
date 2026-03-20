@@ -224,3 +224,9 @@ SUSPICIOUS_STRING_PATTERNS = [
     StringPattern(r'cipher\s+/w:', "secure_overwrite", 8),
     StringPattern(r'SDelete|sdelete|overwrite', "secure_overwrite", 8),
 ]
+
+try:
+    from binanalysis.generated_patterns import GENERATED_PATTERNS
+    SUSPICIOUS_STRING_PATTERNS = SUSPICIOUS_STRING_PATTERNS + GENERATED_PATTERNS
+except ImportError:
+    pass

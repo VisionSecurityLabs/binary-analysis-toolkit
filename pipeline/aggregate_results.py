@@ -121,13 +121,28 @@ def should_suggest(count: int, total: int, pattern_type: str) -> bool:
 # ──────────────────────────────────────────────────────────────────────────
 
 
+def load_manifest(samples_dir: Path) -> dict[str, dict]:
+    """Load family manifest (sha256 → {family, tag}) if available."""
+    manifest_path = samples_dir / "family_manifest.json"
+    if manifest_path.exists():
+        with open(manifest_path) as f:
+            return json.load(f)
+    return {}
+
+
 def load_reports(samples_dir: Path) -> list[dict]:
+    manifest = load_manifest(samples_dir)
     reports = []
     for path in sorted(samples_dir.glob("*_analysis.json")):
         try:
             with open(path) as f:
                 data = json.load(f)
             data["_source_file"] = str(path)
+            # Attach family info from manifest
+            sha256 = path.stem.replace("_analysis", "")
+            if sha256 in manifest:
+                data["_family"] = manifest[sha256].get("family", "unknown")
+                data["_tag"] = manifest[sha256].get("tag", "unknown")
             reports.append(data)
         except Exception as e:
             print(f"  [!] Could not read {path.name}: {e}")
@@ -246,8 +261,47 @@ def aggregate(reports: list[dict]) -> dict:
         if should_suggest(c, total, "ioc_domain")
     ]
 
+    # ── Per-family analysis (for specimen rule generation) ───────────────
+    family_profiles: dict[str, dict] = {}
+    families: defaultdict[str, list[dict]] = defaultdict(list)
+    for r in reports:
+        fam = r.get("_family", "unknown")
+        families[fam].append(r)
+
+    for fam, fam_reports in families.items():
+        if fam == "unknown" or len(fam_reports) < 3:
+            continue
+        fam_total = len(fam_reports)
+
+        # Imports unique to this family (appear in >50% of family but <10% overall)
+        fam_api_freq: Counter[str] = Counter()
+        for r in fam_reports:
+            fam_api_freq.update(_flat_imports(r))
+        distinctive_apis = [
+            api for api, cnt in fam_api_freq.most_common(30)
+            if cnt / fam_total >= 0.5 and api_freq.get(api, 0) / total < 0.1
+        ]
+
+        # Strings unique to this family
+        fam_strings: Counter[str] = Counter()
+        for r in fam_reports:
+            for s in _string_values(r):
+                if len(s) >= 8:
+                    fam_strings[s[:80]] += 1
+        distinctive_strings = [
+            s for s, cnt in fam_strings.most_common(20)
+            if cnt / fam_total >= 0.5
+        ]
+
+        if distinctive_apis or distinctive_strings:
+            family_profiles[fam] = {
+                "sample_count": fam_total,
+                "distinctive_apis": distinctive_apis[:15],
+                "distinctive_strings": distinctive_strings[:10],
+            }
+
     return {
-        "meta": {"total_samples": total},
+        "meta": {"total_samples": total, "families": {f: len(r) for f, r in families.items() if f != "unknown"}},
         "rule_coverage": [
             {"rule": rule, "count": count, "pct": round(100 * count / total, 1)}
             for rule, count in rule_hits.most_common()
@@ -259,6 +313,7 @@ def aggregate(reports: list[dict]) -> dict:
             "recurring_registry_keys": reg_hits,
             "recurring_c2_domains": domain_hits,
         },
+        "family_profiles": family_profiles,
     }
 
 
