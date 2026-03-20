@@ -104,18 +104,18 @@ def should_suggest(count: int, total: int, pattern_type: str) -> bool:
     Returns:
         bool: True to include this pattern in the enrichment report
     """
-    if total == 0 or count < 2:
+    if total == 0 or count < 5:
         return False
     pct = 100 * count / total
     thresholds = {
-        "import_combo": 5,
-        "string_url": 10,
-        "string_registry": 10,
-        "string_mutex": 15,
-        "ioc_domain": 5,
-        "ioc_ip": 10,
+        "import_combo": 15,
+        "string_url": 20,
+        "string_registry": 20,
+        "string_mutex": 25,
+        "ioc_domain": 10,
+        "ioc_ip": 15,
     }
-    return pct >= thresholds.get(pattern_type, 10)
+    return pct >= thresholds.get(pattern_type, 20)
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -269,17 +269,17 @@ def aggregate(reports: list[dict]) -> dict:
         families[fam].append(r)
 
     for fam, fam_reports in families.items():
-        if fam == "unknown" or len(fam_reports) < 3:
+        if fam == "unknown" or len(fam_reports) < 5:
             continue
         fam_total = len(fam_reports)
 
-        # Imports unique to this family (appear in >50% of family but <10% overall)
+        # Imports unique to this family (appear in >60% of family but <5% overall)
         fam_api_freq: Counter[str] = Counter()
         for r in fam_reports:
             fam_api_freq.update(_flat_imports(r))
         distinctive_apis = [
             api for api, cnt in fam_api_freq.most_common(30)
-            if cnt / fam_total >= 0.5 and api_freq.get(api, 0) / total < 0.1
+            if cnt / fam_total >= 0.6 and api_freq.get(api, 0) / total < 0.05
         ]
 
         # Strings unique to this family — only keep stable behavioral indicators
@@ -300,7 +300,7 @@ def aggregate(reports: list[dict]) -> dict:
                     fam_strings[s] += 1
         distinctive_strings = [
             s for s, cnt in fam_strings.most_common(20)
-            if cnt / fam_total >= 0.5
+            if cnt / fam_total >= 0.6
         ]
 
         if distinctive_apis or distinctive_strings:

@@ -54,6 +54,23 @@ SEVERITY_BY_CATEGORY = {
     "privilege_escalation": "high",
 }
 
+# APIs too common in legitimate software to be useful as single indicators.
+# These are only valuable when paired with other suspicious APIs.
+BENIGN_COMMON_APIS = {
+    "GetProcAddress", "LoadLibraryA", "LoadLibraryW",
+    "VirtualAlloc", "VirtualFree", "VirtualProtect",
+    "CreateProcessA", "CreateProcessW",
+    "RegOpenKeyExA", "RegOpenKeyExW",
+    "RegSetValueExA", "RegSetValueExW",
+    "CryptEncrypt", "CryptDecrypt",
+    "WSAStartup", "connect", "send", "recv",
+    "InternetOpenA", "InternetOpenW",
+    "GetTickCount", "QueryPerformanceCounter",
+    "OpenProcess", "ReadProcessMemory",
+    "CreateFileA", "CreateFileW",
+    "WinExec", "ShellExecuteA", "ShellExecuteW",
+}
+
 
 def _slugify(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
@@ -80,34 +97,35 @@ def _infer_pair_category(a: str, b: str) -> str:
 
 
 def generate_rules(report: dict, min_pct: float) -> str:
-    """Generate behavioral rules from uncovered APIs and pairs."""
+    """Generate behavioral rules from uncovered API pairs only.
+
+    Single-API rules are intentionally excluded — they are too broad and
+    would fire on legitimate software. Only API combinations that span
+    different categories (e.g. injection + network) are generated, and
+    pairs where both APIs are common benign calls are skipped.
+    """
     cands = report.get("enrichment_candidates", {})
-    single_apis = cands.get("uncovered_single_apis", [])
     api_pairs = cands.get("uncovered_api_pairs", [])
 
     rules: list[str] = []
-
-    for entry in single_apis:
-        api = entry["api"]
-        pct = entry["pct"]
-        if pct < min_pct:
-            continue
-        cat = _infer_category(api)
-        sev = SEVERITY_BY_CATEGORY.get(cat, "medium")
-        slug = _slugify(f"gen_{api}")
-        rules.append(
-            f'    Rule("{slug}", "{cat}", "{sev}",\n'
-            f'         "Auto-generated: {api} detected in {{pct}}% of corpus",\n'
-            f'         lambda ctx: ctx.has_import("{api}")),'.replace("{pct}", str(pct))
-        )
 
     for entry in api_pairs:
         a, b = entry["pair"]
         pct = entry["pct"]
         if pct < min_pct:
             continue
+        # Skip if both APIs are too common in legitimate software
+        if a in BENIGN_COMMON_APIS and b in BENIGN_COMMON_APIS:
+            continue
+        # Prefer cross-category pairs (e.g. injection + network) — they're
+        # more distinctive than same-category pairs
+        cat_a = _infer_category(a)
+        cat_b = _infer_category(b)
         cat = _infer_pair_category(a, b)
         sev = SEVERITY_BY_CATEGORY.get(cat, "medium")
+        # Boost severity for cross-category combos
+        if cat_a != cat_b and sev == "medium":
+            sev = "high"
         slug = _slugify(f"gen_{a}_{b}")
         rules.append(
             f'    Rule("{slug}", "{cat}", "{sev}",\n'
@@ -201,31 +219,33 @@ def generate_specimen_rules(report: dict) -> str:
         strings = profile.get("distinctive_strings", [])
         count = profile.get("sample_count", 0)
 
-        # Generate import-based specimen rule if family has distinctive APIs
-        if len(apis) >= 2:
-            # Pick top 3 most distinctive APIs for a combo check
-            check_apis = apis[:3]
-            api_checks = " and ".join(f'ctx.has_import("{a}")' for a in check_apis)
-            apis_desc = " + ".join(check_apis)
+        # Need at least 3 distinctive APIs for a reliable family fingerprint
+        if len(apis) < 3:
+            continue
+
+        check_apis = apis[:4]
+        apis_desc = " + ".join(check_apis)
+
+        # Best case: family has both distinctive APIs AND strings — combine with AND
+        best_strings = [s for s in strings if len(s) >= 12][:3]
+        if best_strings:
+            strings_repr = repr(best_strings)
             rules.append(
-                f'    Rule("specimen_{slug}_apis", "family_detection", "high",\n'
+                f'    Rule("specimen_{slug}", "family_detection", "high",\n'
+                f'         "{family} family: distinctive APIs ({apis_desc}) + string markers",\n'
+                f'         lambda ctx, _a={check_apis!r}, _s={strings_repr}:\n'
+                f'             all(ctx.has_import(a) for a in _a)\n'
+                f'             and any(ctx.has_string_containing(s) for s in _s)),\n'
+                f'    # Based on {count} samples'
+            )
+        else:
+            # APIs only — require all 4 to match (tighter)
+            rules.append(
+                f'    Rule("specimen_{slug}", "family_detection", "high",\n'
                 f'         "{family} family: distinctive API combo ({apis_desc})",\n'
                 f'         lambda ctx, _a={check_apis!r}: all(ctx.has_import(a) for a in _a)),\n'
                 f'    # Based on {count} samples'
             )
-
-        # Generate string-based specimen rule if family has distinctive strings
-        if strings:
-            # Pick strings that look most like identifiers (not generic paths)
-            best = [s for s in strings if len(s) >= 10][:3]
-            if best:
-                strings_repr = repr(best)
-                rules.append(
-                    f'    Rule("specimen_{slug}_strings", "family_detection", "high",\n'
-                    f'         "{family} family: distinctive string patterns",\n'
-                    f'         lambda ctx, _s={strings_repr}: any(ctx.has_string_containing(s) for s in _s)),\n'
-                    f'    # Based on {count} samples'
-                )
 
     if not rules:
         return ""
@@ -290,8 +310,8 @@ def main():
     parser = argparse.ArgumentParser(description="Auto-generate detection rules from enrichment report")
     parser.add_argument("--report", type=Path, default=REPORT_DEFAULT,
                         help=f"Enrichment report JSON (default: {REPORT_DEFAULT})")
-    parser.add_argument("--min-pct", type=float, default=10.0,
-                        help="Minimum corpus prevalence %% to generate a rule (default: 10)")
+    parser.add_argument("--min-pct", type=float, default=20.0,
+                        help="Minimum corpus prevalence %% to generate a rule (default: 20)")
     parser.add_argument("--dry-run", action="store_true",
                         help="Print generated code to stdout instead of writing files")
     args = parser.parse_args()

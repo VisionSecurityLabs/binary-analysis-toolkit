@@ -42,8 +42,8 @@ def main():
     parser.add_argument("--yara", action="store_true", help="Enable YARA scanning")
 
     # Stage 4 — Generate
-    parser.add_argument("--min-pct", type=float, default=10.0,
-                        help="Minimum corpus prevalence %% for rule generation (default: 10)")
+    parser.add_argument("--min-pct", type=float, default=20.0,
+                        help="Minimum corpus prevalence %% for rule generation (default: 20)")
     parser.add_argument("--dry-run", action="store_true",
                         help="Preview generated rules without writing files")
 
