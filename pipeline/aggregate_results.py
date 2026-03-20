@@ -282,12 +282,22 @@ def aggregate(reports: list[dict]) -> dict:
             if cnt / fam_total >= 0.5 and api_freq.get(api, 0) / total < 0.1
         ]
 
-        # Strings unique to this family
+        # Strings unique to this family — only keep stable behavioral indicators
+        # (mutex names, PDB paths, campaign IDs), skip ephemeral content
+        _SKIP_STRING = re.compile(
+            r"https?://|"           # URLs
+            r"[a-zA-Z0-9.-]+\.(com|net|org|io|ru|cn|tk|top)\b|"  # domains
+            r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b|"  # IPs
+            r"^[A-Z]:\\|"           # full Windows paths
+            r"^%[A-Z]+%|"          # env variable paths
+            r"^\{[0-9a-f-]+\}$",   # GUIDs
+            re.IGNORECASE,
+        )
         fam_strings: Counter[str] = Counter()
         for r in fam_reports:
             for s in _string_values(r):
-                if len(s) >= 8:
-                    fam_strings[s[:80]] += 1
+                if 8 <= len(s) <= 64 and not _SKIP_STRING.search(s):
+                    fam_strings[s] += 1
         distinctive_strings = [
             s for s, cnt in fam_strings.most_common(20)
             if cnt / fam_total >= 0.5
