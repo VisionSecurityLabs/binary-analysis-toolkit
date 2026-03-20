@@ -163,6 +163,16 @@ def main():
 
     # ── Stage 5: Validate ────────────────────────────────────────────────
     if args.clean_dir and not args.dry_run and not args.skip_generate:
+        # Auto-fetch clean samples if directory is empty or missing
+        clean_files = list(args.clean_dir.glob("*.exe")) + list(args.clean_dir.glob("*.dll")) if args.clean_dir.is_dir() else []
+        if not clean_files:
+            print(f"\n{'='*60}")
+            print(f"  STAGE 5a — Fetch Clean Samples")
+            print(f"{'='*60}")
+            from pipeline.fetch_clean_samples import main as fetch_clean
+            sys.argv = ["fetch_clean_samples", "--out", str(args.clean_dir)]
+            fetch_clean()
+
         print(f"\n{'='*60}")
         print(f"  STAGE 5 — Validate Against Clean Files")
         print(f"{'='*60}")

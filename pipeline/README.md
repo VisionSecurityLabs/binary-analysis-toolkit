@@ -128,6 +128,9 @@ Generated files are auto-loaded by the engine when present:
 ### Stage 5 — Validate Against Clean Files
 
 ```bash
+# Fetch clean PEs (SysInternals + NirSoft) — only needed once
+uv run python pipeline/fetch_clean_samples.py --out clean_samples/
+
 # Validate and auto-remove false positive rules
 uv run python pipeline/validate_rules.py --clean-dir clean_samples/
 
@@ -135,7 +138,7 @@ uv run python pipeline/validate_rules.py --clean-dir clean_samples/
 uv run python pipeline/validate_rules.py --clean-dir clean_samples/ --report-only
 ```
 
-Place known-clean PE files (.exe, .dll) in a directory (e.g. `clean_samples/`).
+If `--clean-dir` is empty when running `run.py`, clean samples are fetched automatically.
 Any generated rule that fires on a clean file is automatically removed.
 
 Re-run Stage 2 + 3 after validating to verify improved coverage.

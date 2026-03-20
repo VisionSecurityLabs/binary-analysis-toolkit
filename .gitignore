@@ -16,6 +16,7 @@ results/
 
 # Pipeline — downloaded malware samples
 samples/
+clean_samples/
 *.exe
 enrichment_report.json
 batch_summary.json
