@@ -12,6 +12,7 @@ dependencies = [
     "flare-capa",
     "dnfile",
     "r2pipe",
+    "requests",
 ]
 
 [tool.hatch.build.targets.wheel]

@@ -39,6 +39,7 @@ dependencies = [
     { name = "pefile" },
     { name = "pyyaml" },
     { name = "r2pipe" },
+    { name = "requests" },
     { name = "yara-python" },
 ]
 
@@ -49,6 +50,7 @@ requires-dist = [
     { name = "pefile" },
     { name = "pyyaml" },
     { name = "r2pipe" },
+    { name = "requests" },
     { name = "yara-python" },
 ]
 
