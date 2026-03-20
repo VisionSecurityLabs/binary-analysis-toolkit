@@ -104,11 +104,18 @@ def should_suggest(count: int, total: int, pattern_type: str) -> bool:
     Returns:
         bool: True to include this pattern in the enrichment report
     """
-    # TODO: implement your threshold logic here (5-10 lines)
-    # Example starter (replace with your own logic):
-    raise NotImplementedError(
-        "Implement should_suggest() — see the docstring and comments above"
-    )
+    if total == 0 or count < 2:
+        return False
+    pct = 100 * count / total
+    thresholds = {
+        "import_combo": 5,
+        "string_url": 10,
+        "string_registry": 10,
+        "string_mutex": 15,
+        "ioc_domain": 5,
+        "ioc_ip": 10,
+    }
+    return pct >= thresholds.get(pattern_type, 10)
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -129,6 +136,8 @@ def load_reports(samples_dir: Path) -> list[dict]:
 
 def aggregate(reports: list[dict]) -> dict:
     total = len(reports)
+    if total == 0:
+        return {"meta": {"total_samples": 0}, "rule_coverage": [], "enrichment_candidates": {}}
     print(f"[*] Aggregating {total} reports…")
 
     # ── Rule coverage ──────────────────────────────────────────────────────
@@ -143,11 +152,26 @@ def aggregate(reports: list[dict]) -> dict:
     # Pair frequency (for combo rule suggestions)
     pair_freq: Counter[tuple] = Counter()
 
+    # APIs worth tracking for combo-rule suggestions (process, injection, network, crypto)
+    _SUSPICIOUS_PREFIXES = (
+        "Virtual", "NtMap", "NtWrite", "NtCreate", "NtOpen", "NtAllocate",
+        "CreateRemote", "QueueUser", "SetThread", "WriteProcess", "ReadProcess",
+        "CreateProcess", "WinExec", "ShellExecute",
+        "Crypt", "BCrypt",
+        "WSA", "connect", "send", "recv", "Internet", "HttpSend", "WinHttp",
+        "URLDownload",
+        "RegOpen", "RegSet", "RegCreate",
+        "OpenProcess", "AdjustToken", "LookupPrivilege",
+        "GetProcAddress", "LoadLibrary",
+    )
+
     for r in reports:
         imports = _flat_imports(r)
         api_freq.update(imports)
-        # Count pairs of suspicious-looking APIs
-        suspicious_apis = [a for a in imports if not a.startswith("ord(")]
+        suspicious_apis = [
+            a for a in imports
+            if any(a.startswith(p) for p in _SUSPICIOUS_PREFIXES)
+        ]
         for i, a in enumerate(suspicious_apis):
             for b in suspicious_apis[i + 1 :]:
                 pair_freq[tuple(sorted([a, b]))] += 1
@@ -166,14 +190,19 @@ def aggregate(reports: list[dict]) -> dict:
                 url_candidates[s[:80]] += 1
             if registry_pattern.search(s):
                 registry_candidates[s[:80]] += 1
-            # Mutex heuristic: short random-looking strings in names
-            if 6 <= len(s) <= 32 and re.match(r"^[A-Za-z0-9_\-]{6,32}$", s):
+            # Mutex heuristic: strings that look like mutex names (mixed case/digits,
+            # not common words or API names ending in A/W/Ex)
+            if (6 <= len(s) <= 32
+                    and re.match(r"^[A-Za-z0-9_\-]{6,32}$", s)
+                    and re.search(r"[a-z]", s) and re.search(r"[A-Z]", s)
+                    and not s.endswith((".dll", ".exe", ".sys"))
+                    and not re.match(r"^(?:Nt|Zw|Rtl|Ldr|Get|Set|Create|Open|Close|Read|Write|Delete)", s)):
                 mutex_candidates[s] += 1
 
     # ── IOC clustering ─────────────────────────────────────────────────────
     domain_freq: Counter[str] = Counter()
     ip_freq: Counter[str] = Counter()
-    ip_re = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+    ip_re = re.compile(r"\b(?:(?:25[0-5]|2[0-4]\d|1?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|1?\d\d?)\b")
 
     for r in reports:
         iocs = r.get("iocs", {})
@@ -183,10 +212,11 @@ def aggregate(reports: list[dict]) -> dict:
             val = entry if isinstance(entry, str) else entry.get("value", "")
             if val:
                 ip_freq[val] += 1
-        # Also mine raw strings for IPs
+        # Also mine raw strings for IPs not already in structured IOCs
+        known_ips = set(iocs.get("ips", []))
         for s in _string_values(r):
             for ip in ip_re.findall(s):
-                if not ip.startswith(("127.", "0.", "255.")):
+                if ip not in known_ips and not ip.startswith(("127.", "0.", "255.", "10.", "192.168.")):
                     ip_freq[ip] += 1
 
     # ── Build enrichment candidates ────────────────────────────────────────

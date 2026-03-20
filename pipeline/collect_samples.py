@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import io
+import re
 import struct
 import time
 import zipfile
@@ -25,6 +26,8 @@ import requests
 BAZAAR_API = os.getenv("BAZAAR_API_URL", "https://mb-api.abuse.ch/api/v1/")
 DEFAULT_OUT = Path(os.getenv("SAMPLES_DIR", "samples"))
 REQUEST_DELAY = 0.5  # seconds between download requests (be a good citizen)
+MAX_SAMPLE_SIZE = 50 * 1024 * 1024  # 50 MB cap on extracted sample size
+_SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 
 
 def _is_pe(data: bytes) -> bool:
@@ -54,6 +57,10 @@ def query_samples_by_tag(tag: str, limit: int = 100) -> list[dict]:
 
 def download_sample(sha256: str, out_dir: Path) -> Path | None:
     """Download a sample ZIP from MalwareBazaar, extract the PE, return path or None."""
+    if not _SHA256_RE.match(sha256):
+        print(f"  [!] Invalid SHA256 hash, skipping: {sha256[:64]}")
+        return None
+
     out_path = out_dir / f"{sha256}.exe"
     if out_path.exists():
         return out_path  # already have it
@@ -70,6 +77,11 @@ def download_sample(sha256: str, out_dir: Path) -> Path | None:
         zf = zipfile.ZipFile(io.BytesIO(resp.content))
         names = zf.namelist()
         if not names:
+            return None
+
+        info = zf.getinfo(names[0])
+        if info.file_size > MAX_SAMPLE_SIZE:
+            print(f"  [!] Sample too large ({info.file_size} bytes), skipping: {sha256[:16]}")
             return None
 
         raw = zf.read(names[0], pwd=b"infected")

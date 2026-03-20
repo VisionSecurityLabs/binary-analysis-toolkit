@@ -13,3 +13,10 @@ wheels/
 
 binary_process/
 results/
+
+# Pipeline — downloaded malware samples
+samples/
+*.exe
+enrichment_report.json
+batch_summary.json
+.env
