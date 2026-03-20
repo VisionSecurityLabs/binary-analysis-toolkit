@@ -16,7 +16,7 @@ import io
 import re
 import struct
 import time
-import zipfile
+import pyzipper
 from pathlib import Path
 
 import os
@@ -86,8 +86,8 @@ def download_sample(sha256: str, out_dir: Path) -> Path | None:
         )
         resp.raise_for_status()
 
-        # Response is a ZIP with password "infected"
-        zf = zipfile.ZipFile(io.BytesIO(resp.content))
+        # Response is an AES-256 encrypted ZIP with password "infected"
+        zf = pyzipper.AESZipFile(io.BytesIO(resp.content))
         names = zf.namelist()
         if not names:
             return None
