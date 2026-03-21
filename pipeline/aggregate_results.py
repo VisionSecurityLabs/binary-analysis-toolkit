@@ -255,10 +255,28 @@ def aggregate(reports: list[dict]) -> dict:
         for r, c in registry_candidates.most_common(20)
         if should_suggest(c, total, "string_registry")
     ]
+    # Filter out benign/common domains and .NET namespaces that the domain
+    # regex picks up as false positives (e.g. System.IO → .io TLD).
+    _BENIGN_DOMAINS = {
+        "microsoft.com", "windows.com", "windowsupdate.com",
+        "digicert.com", "verisign.com", "symantec.com", "thawte.com",
+        "globalsign.com", "godaddy.com", "letsencrypt.org",
+        "google.com", "googleapis.com", "gstatic.com",
+        "github.com", "github.io",
+        "mozilla.org", "mozilla.com",
+        "w3.org", "xml.org", "xmlsoap.org", "openxmlformats.org",
+        "apache.org", "schemas.com",
+    }
+    _DOTNET_NAMESPACE_RE = re.compile(
+        r"^(?:System|Microsoft|Windows|Mono|Internal)\.[A-Z]",
+    )
     domain_hits = [
         {"domain": d, "count": c, "pct": round(100 * c / total, 1)}
         for d, c in domain_freq.most_common(20)
         if should_suggest(c, total, "ioc_domain")
+        and d not in _BENIGN_DOMAINS
+        and not any(d.endswith("." + b) for b in _BENIGN_DOMAINS)
+        and not _DOTNET_NAMESPACE_RE.match(d)
     ]
 
     # ── Per-family analysis (for specimen rule generation) ───────────────
