@@ -114,13 +114,17 @@ def generate_rules(report: dict, min_pct: float) -> str:
         pct = entry["pct"]
         if pct < min_pct:
             continue
-        # Skip if both APIs are too common in legitimate software
-        if a in BENIGN_COMMON_APIS and b in BENIGN_COMMON_APIS:
+        # Skip pairs where either API is common in legitimate software —
+        # two-API combos involving benign APIs fire on SysInternals tools
+        # and other clean system utilities.
+        if a in BENIGN_COMMON_APIS or b in BENIGN_COMMON_APIS:
             continue
-        # Prefer cross-category pairs (e.g. injection + network) — they're
-        # more distinctive than same-category pairs
+        # Require cross-category pairs — same-category pairs (e.g. two
+        # registry APIs) are too common in legitimate software
         cat_a = _infer_category(a)
         cat_b = _infer_category(b)
+        if cat_a == cat_b:
+            continue
         cat = _infer_pair_category(a, b)
         sev = SEVERITY_BY_CATEGORY.get(cat, "medium")
         # Boost severity for cross-category combos
