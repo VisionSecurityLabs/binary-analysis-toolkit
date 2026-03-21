@@ -1,0 +1,421 @@
+{
+  "date": "2026-03-21",
+  "clean_files": 17,
+  "generated_rules": 29,
+  "rules_with_fp": 29,
+  "per_rule": {
+    "gen_loadlibraryexw_regcreatekeyexw_regopenkeyexw": {
+      "fp_count": 5,
+      "total_clean": 17,
+      "fp_rate": 0.2941,
+      "triggered_on": [
+        "autoruns.exe",
+        "sigcheck.exe",
+        "tcpview.exe",
+        "Procexp.exe",
+        "procmon.exe"
+      ],
+      "passed": false
+    },
+    "gen_adjusttokenprivileges_loadlibraryexw_regcreatekeyexw": {
+      "fp_count": 3,
+      "total_clean": 17,
+      "fp_rate": 0.1765,
+      "triggered_on": [
+        "autoruns.exe",
+        "Procexp.exe",
+        "procmon.exe"
+      ],
+      "passed": false
+    },
+    "gen_adjusttokenprivileges_getprocaddress_regcreatekeyexw": {
+      "fp_count": 3,
+      "total_clean": 17,
+      "fp_rate": 0.1765,
+      "triggered_on": [
+        "autoruns.exe",
+        "Procexp.exe",
+        "procmon.exe"
+      ],
+      "passed": false
+    },
+    "gen_openprocesstoken_regcreatekeyexw_regopenkeyexw": {
+      "fp_count": 5,
+      "total_clean": 17,
+      "fp_rate": 0.2941,
+      "triggered_on": [
+        "autoruns.exe",
+        "sigcheck.exe",
+        "tcpview.exe",
+        "Procexp.exe",
+        "procmon.exe"
+      ],
+      "passed": false
+    },
+    "gen_loadlibraryexw_with_env_variable": {
+      "fp_count": 11,
+      "total_clean": 17,
+      "fp_rate": 0.6471,
+      "triggered_on": [
+        "autoruns.exe",
+        "sigcheck.exe",
+        "accesschk.exe",
+        "handle.exe",
+        "listdlls.exe",
+        "logonsessions.exe",
+        "du.exe",
+        "DNSQuerySniffer.exe",
+        "psinfo.exe",
+        "Procexp.exe"
+      ],
+      "passed": false
+    },
+    "gen_loadlibraryexw_openprocesstoken_regsetvalueexw": {
+      "fp_count": 8,
+      "total_clean": 17,
+      "fp_rate": 0.4706,
+      "triggered_on": [
+        "autoruns.exe",
+        "sigcheck.exe",
+        "accesschk.exe",
+        "handle.exe",
+        "logonsessions.exe",
+        "tcpview.exe",
+        "Procexp.exe",
+        "procmon.exe"
+      ],
+      "passed": false
+    },
+    "gen_loadlibraryexw_openprocesstoken_regopenkeyexw": {
+      "fp_count": 8,
+      "total_clean": 17,
+      "fp_rate": 0.4706,
+      "triggered_on": [
+        "autoruns.exe",
+        "sigcheck.exe",
+        "accesschk.exe",
+        "handle.exe",
+        "logonsessions.exe",
+        "tcpview.exe",
+        "Procexp.exe",
+        "procmon.exe"
+      ],
+      "passed": false
+    },
+    "gen_getprocaddress_loadlibraryexw_regcreatekeyexw": {
+      "fp_count": 5,
+      "total_clean": 17,
+      "fp_rate": 0.2941,
+      "triggered_on": [
+        "autoruns.exe",
+        "sigcheck.exe",
+        "tcpview.exe",
+        "Procexp.exe",
+        "procmon.exe"
+      ],
+      "passed": false
+    },
+    "gen_adjusttokenprivileges_with_env_variable": {
+      "fp_count": 7,
+      "total_clean": 17,
+      "fp_rate": 0.4118,
+      "triggered_on": [
+        "autoruns.exe",
+        "accesschk.exe",
+        "handle.exe",
+        "listdlls.exe",
+        "logonsessions.exe",
+        "Procexp.exe",
+        "procmon.exe"
+      ],
+      "passed": false
+    },
+    "gen_loadlibraryexw_openprocesstoken_regcreatekeyexw": {
+      "fp_count": 5,
+      "total_clean": 17,
+      "fp_rate": 0.2941,
+      "triggered_on": [
+        "autoruns.exe",
+        "sigcheck.exe",
+        "tcpview.exe",
+        "Procexp.exe",
+        "procmon.exe"
+      ],
+      "passed": false
+    },
+    "gen_loadlibraryexw_with_browser_path": {
+      "fp_count": 15,
+      "total_clean": 17,
+      "fp_rate": 0.8824,
+      "triggered_on": [
+        "autoruns.exe",
+        "sigcheck.exe",
+        "accesschk.exe",
+        "handle.exe",
+        "listdlls.exe",
+        "logonsessions.exe",
+        "strings.exe",
+        "du.exe",
+        "whois.exe",
+        "tcpview.exe"
+      ],
+      "passed": false
+    },
+    "gen_adjusttokenprivileges_getprocaddress_loadlibraryexw": {
+      "fp_count": 7,
+      "total_clean": 17,
+      "fp_rate": 0.4118,
+      "triggered_on": [
+        "autoruns.exe",
+        "accesschk.exe",
+        "handle.exe",
+        "listdlls.exe",
+        "logonsessions.exe",
+        "Procexp.exe",
+        "procmon.exe"
+      ],
+      "passed": false
+    },
+    "gen_adjusttokenprivileges_loadlibraryexw_regsetvalueexw": {
+      "fp_count": 6,
+      "total_clean": 17,
+      "fp_rate": 0.3529,
+      "triggered_on": [
+        "autoruns.exe",
+        "accesschk.exe",
+        "handle.exe",
+        "logonsessions.exe",
+        "Procexp.exe",
+        "procmon.exe"
+      ],
+      "passed": false
+    },
+    "gen_loadlibraryexw_regcreatekeyexw_regsetvalueexw": {
+      "fp_count": 5,
+      "total_clean": 17,
+      "fp_rate": 0.2941,
+      "triggered_on": [
+        "autoruns.exe",
+        "sigcheck.exe",
+        "tcpview.exe",
+        "Procexp.exe",
+        "procmon.exe"
+      ],
+      "passed": false
+    },
+    "gen_openprocesstoken_with_browser_path": {
+      "fp_count": 9,
+      "total_clean": 17,
+      "fp_rate": 0.5294,
+      "triggered_on": [
+        "autoruns.exe",
+        "sigcheck.exe",
+        "accesschk.exe",
+        "handle.exe",
+        "listdlls.exe",
+        "logonsessions.exe",
+        "tcpview.exe",
+        "Procexp.exe",
+        "procmon.exe"
+      ],
+      "passed": false
+    },
+    "gen_openprocesstoken_with_admin_share": {
+      "fp_count": 8,
+      "total_clean": 17,
+      "fp_rate": 0.4706,
+      "triggered_on": [
+        "autoruns.exe",
+        "sigcheck.exe",
+        "accesschk.exe",
+        "handle.exe",
+        "logonsessions.exe",
+        "tcpview.exe",
+        "Procexp.exe",
+        "procmon.exe"
+      ],
+      "passed": false
+    },
+    "gen_getprocaddress_with_recon_command": {
+      "fp_count": 10,
+      "total_clean": 17,
+      "fp_rate": 0.5882,
+      "triggered_on": [
+        "autoruns.exe",
+        "sigcheck.exe",
+        "handle.exe",
+        "listdlls.exe",
+        "logonsessions.exe",
+        "DNSQuerySniffer.exe",
+        "psinfo.exe",
+        "pslist.exe",
+        "Procexp.exe",
+        "procmon.exe"
+      ],
+      "passed": false
+    },
+    "gen_getprocaddress_loadlibraryexw_openprocesstoken": {
+      "fp_count": 9,
+      "total_clean": 17,
+      "fp_rate": 0.5294,
+      "triggered_on": [
+        "autoruns.exe",
+        "sigcheck.exe",
+        "accesschk.exe",
+        "handle.exe",
+        "listdlls.exe",
+        "logonsessions.exe",
+        "tcpview.exe",
+        "Procexp.exe",
+        "procmon.exe"
+      ],
+      "passed": false
+    },
+    "gen_loadlibraryexw_with_admin_share": {
+      "fp_count": 15,
+      "total_clean": 17,
+      "fp_rate": 0.8824,
+      "triggered_on": [
+        "autoruns.exe",
+        "sigcheck.exe",
+        "accesschk.exe",
+        "handle.exe",
+        "logonsessions.exe",
+        "strings.exe",
+        "du.exe",
+        "DNSQuerySniffer.exe",
+        "whois.exe",
+        "tcpview.exe"
+      ],
+      "passed": false
+    },
+    "gen_adjusttokenprivileges_regcreatekeyexw_regopenkeyexw": {
+      "fp_count": 3,
+      "total_clean": 17,
+      "fp_rate": 0.1765,
+      "triggered_on": [
+        "autoruns.exe",
+        "Procexp.exe",
+        "procmon.exe"
+      ],
+      "passed": false
+    },
+    "gen_adjusttokenprivileges_loadlibraryexw_regopenkeyexw": {
+      "fp_count": 6,
+      "total_clean": 17,
+      "fp_rate": 0.3529,
+      "triggered_on": [
+        "autoruns.exe",
+        "accesschk.exe",
+        "handle.exe",
+        "logonsessions.exe",
+        "Procexp.exe",
+        "procmon.exe"
+      ],
+      "passed": false
+    },
+    "gen_createprocessw_loadlibraryexw_openprocesstoken": {
+      "fp_count": 4,
+      "total_clean": 17,
+      "fp_rate": 0.2353,
+      "triggered_on": [
+        "autoruns.exe",
+        "handle.exe",
+        "Procexp.exe",
+        "procmon.exe"
+      ],
+      "passed": false
+    },
+    "gen_virtualalloc_with_recon_command": {
+      "fp_count": 3,
+      "total_clean": 17,
+      "fp_rate": 0.1765,
+      "triggered_on": [
+        "autoruns.exe",
+        "Procexp.exe",
+        "procmon.exe"
+      ],
+      "passed": false
+    },
+    "gen_adjusttokenprivileges_regcreatekeyexw_regsetvalueexw": {
+      "fp_count": 3,
+      "total_clean": 17,
+      "fp_rate": 0.1765,
+      "triggered_on": [
+        "autoruns.exe",
+        "Procexp.exe",
+        "procmon.exe"
+      ],
+      "passed": false
+    },
+    "gen_getprocaddress_openprocesstoken_regcreatekeyexw": {
+      "fp_count": 5,
+      "total_clean": 17,
+      "fp_rate": 0.2941,
+      "triggered_on": [
+        "autoruns.exe",
+        "sigcheck.exe",
+        "tcpview.exe",
+        "Procexp.exe",
+        "procmon.exe"
+      ],
+      "passed": false
+    },
+    "gen_openprocesstoken_with_env_variable": {
+      "fp_count": 8,
+      "total_clean": 17,
+      "fp_rate": 0.4706,
+      "triggered_on": [
+        "autoruns.exe",
+        "sigcheck.exe",
+        "accesschk.exe",
+        "handle.exe",
+        "listdlls.exe",
+        "logonsessions.exe",
+        "Procexp.exe",
+        "procmon.exe"
+      ],
+      "passed": false
+    },
+    "gen_loadlibraryexw_openprocesstoken": {
+      "fp_count": 9,
+      "total_clean": 17,
+      "fp_rate": 0.5294,
+      "triggered_on": [
+        "autoruns.exe",
+        "sigcheck.exe",
+        "accesschk.exe",
+        "handle.exe",
+        "listdlls.exe",
+        "logonsessions.exe",
+        "tcpview.exe",
+        "Procexp.exe",
+        "procmon.exe"
+      ],
+      "passed": false
+    },
+    "gen_loadlibrarya_with_recon_command": {
+      "fp_count": 2,
+      "total_clean": 17,
+      "fp_rate": 0.1176,
+      "triggered_on": [
+        "listdlls.exe",
+        "procmon.exe"
+      ],
+      "passed": false
+    },
+    "gen_openprocesstoken_regcreatekeyexw_regsetvalueexw": {
+      "fp_count": 5,
+      "total_clean": 17,
+      "fp_rate": 0.2941,
+      "triggered_on": [
+        "autoruns.exe",
+        "sigcheck.exe",
+        "tcpview.exe",
+        "Procexp.exe",
+        "procmon.exe"
+      ],
+      "passed": false
+    }
+  }
+}

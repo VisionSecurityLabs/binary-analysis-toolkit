@@ -1,1 +1,386 @@
-{}
+{
+  "gen_loadlibraryexw_openprocesstoken": {
+    "reason": "false_positive",
+    "fp_files": [
+      "autoruns.exe",
+      "sigcheck.exe",
+      "accesschk.exe",
+      "handle.exe",
+      "listdlls.exe",
+      "logonsessions.exe",
+      "tcpview.exe",
+      "Procexp.exe",
+      "procmon.exe"
+    ],
+    "fp_rate": 0.5294,
+    "rejected_date": "2026-03-21"
+  },
+  "gen_getprocaddress_loadlibraryexw_openprocesstoken": {
+    "reason": "false_positive",
+    "fp_files": [
+      "autoruns.exe",
+      "sigcheck.exe",
+      "accesschk.exe",
+      "handle.exe",
+      "listdlls.exe",
+      "logonsessions.exe",
+      "tcpview.exe",
+      "Procexp.exe",
+      "procmon.exe"
+    ],
+    "fp_rate": 0.5294,
+    "rejected_date": "2026-03-21"
+  },
+  "gen_createprocessw_loadlibraryexw_openprocesstoken": {
+    "reason": "false_positive",
+    "fp_files": [
+      "autoruns.exe",
+      "handle.exe",
+      "Procexp.exe",
+      "procmon.exe"
+    ],
+    "fp_rate": 0.2353,
+    "rejected_date": "2026-03-21"
+  },
+  "gen_getprocaddress_loadlibraryexw_regcreatekeyexw": {
+    "reason": "false_positive",
+    "fp_files": [
+      "autoruns.exe",
+      "sigcheck.exe",
+      "tcpview.exe",
+      "Procexp.exe",
+      "procmon.exe"
+    ],
+    "fp_rate": 0.2941,
+    "rejected_date": "2026-03-21"
+  },
+  "gen_loadlibraryexw_regcreatekeyexw_regopenkeyexw": {
+    "reason": "false_positive",
+    "fp_files": [
+      "autoruns.exe",
+      "sigcheck.exe",
+      "tcpview.exe",
+      "Procexp.exe",
+      "procmon.exe"
+    ],
+    "fp_rate": 0.2941,
+    "rejected_date": "2026-03-21"
+  },
+  "gen_loadlibraryexw_regcreatekeyexw_regsetvalueexw": {
+    "reason": "false_positive",
+    "fp_files": [
+      "autoruns.exe",
+      "sigcheck.exe",
+      "tcpview.exe",
+      "Procexp.exe",
+      "procmon.exe"
+    ],
+    "fp_rate": 0.2941,
+    "rejected_date": "2026-03-21"
+  },
+  "gen_adjusttokenprivileges_getprocaddress_loadlibraryexw": {
+    "reason": "false_positive",
+    "fp_files": [
+      "autoruns.exe",
+      "accesschk.exe",
+      "handle.exe",
+      "listdlls.exe",
+      "logonsessions.exe",
+      "Procexp.exe",
+      "procmon.exe"
+    ],
+    "fp_rate": 0.4118,
+    "rejected_date": "2026-03-21"
+  },
+  "gen_adjusttokenprivileges_getprocaddress_regcreatekeyexw": {
+    "reason": "false_positive",
+    "fp_files": [
+      "autoruns.exe",
+      "Procexp.exe",
+      "procmon.exe"
+    ],
+    "fp_rate": 0.1765,
+    "rejected_date": "2026-03-21"
+  },
+  "gen_adjusttokenprivileges_regcreatekeyexw_regopenkeyexw": {
+    "reason": "false_positive",
+    "fp_files": [
+      "autoruns.exe",
+      "Procexp.exe",
+      "procmon.exe"
+    ],
+    "fp_rate": 0.1765,
+    "rejected_date": "2026-03-21"
+  },
+  "gen_adjusttokenprivileges_regcreatekeyexw_regsetvalueexw": {
+    "reason": "false_positive",
+    "fp_files": [
+      "autoruns.exe",
+      "Procexp.exe",
+      "procmon.exe"
+    ],
+    "fp_rate": 0.1765,
+    "rejected_date": "2026-03-21"
+  },
+  "gen_getprocaddress_openprocesstoken_regcreatekeyexw": {
+    "reason": "false_positive",
+    "fp_files": [
+      "autoruns.exe",
+      "sigcheck.exe",
+      "tcpview.exe",
+      "Procexp.exe",
+      "procmon.exe"
+    ],
+    "fp_rate": 0.2941,
+    "rejected_date": "2026-03-21"
+  },
+  "gen_openprocesstoken_regcreatekeyexw_regopenkeyexw": {
+    "reason": "false_positive",
+    "fp_files": [
+      "autoruns.exe",
+      "sigcheck.exe",
+      "tcpview.exe",
+      "Procexp.exe",
+      "procmon.exe"
+    ],
+    "fp_rate": 0.2941,
+    "rejected_date": "2026-03-21"
+  },
+  "gen_openprocesstoken_regcreatekeyexw_regsetvalueexw": {
+    "reason": "false_positive",
+    "fp_files": [
+      "autoruns.exe",
+      "sigcheck.exe",
+      "tcpview.exe",
+      "Procexp.exe",
+      "procmon.exe"
+    ],
+    "fp_rate": 0.2941,
+    "rejected_date": "2026-03-21"
+  },
+  "gen_adjusttokenprivileges_loadlibraryexw_regcreatekeyexw": {
+    "reason": "false_positive",
+    "fp_files": [
+      "autoruns.exe",
+      "Procexp.exe",
+      "procmon.exe"
+    ],
+    "fp_rate": 0.1765,
+    "rejected_date": "2026-03-21"
+  },
+  "gen_adjusttokenprivileges_loadlibraryexw_regopenkeyexw": {
+    "reason": "false_positive",
+    "fp_files": [
+      "autoruns.exe",
+      "accesschk.exe",
+      "handle.exe",
+      "logonsessions.exe",
+      "Procexp.exe",
+      "procmon.exe"
+    ],
+    "fp_rate": 0.3529,
+    "rejected_date": "2026-03-21"
+  },
+  "gen_adjusttokenprivileges_loadlibraryexw_regsetvalueexw": {
+    "reason": "false_positive",
+    "fp_files": [
+      "autoruns.exe",
+      "accesschk.exe",
+      "handle.exe",
+      "logonsessions.exe",
+      "Procexp.exe",
+      "procmon.exe"
+    ],
+    "fp_rate": 0.3529,
+    "rejected_date": "2026-03-21"
+  },
+  "gen_loadlibraryexw_openprocesstoken_regcreatekeyexw": {
+    "reason": "false_positive",
+    "fp_files": [
+      "autoruns.exe",
+      "sigcheck.exe",
+      "tcpview.exe",
+      "Procexp.exe",
+      "procmon.exe"
+    ],
+    "fp_rate": 0.2941,
+    "rejected_date": "2026-03-21"
+  },
+  "gen_loadlibraryexw_openprocesstoken_regopenkeyexw": {
+    "reason": "false_positive",
+    "fp_files": [
+      "autoruns.exe",
+      "sigcheck.exe",
+      "accesschk.exe",
+      "handle.exe",
+      "logonsessions.exe",
+      "tcpview.exe",
+      "Procexp.exe",
+      "procmon.exe"
+    ],
+    "fp_rate": 0.4706,
+    "rejected_date": "2026-03-21"
+  },
+  "gen_loadlibraryexw_openprocesstoken_regsetvalueexw": {
+    "reason": "false_positive",
+    "fp_files": [
+      "autoruns.exe",
+      "sigcheck.exe",
+      "accesschk.exe",
+      "handle.exe",
+      "logonsessions.exe",
+      "tcpview.exe",
+      "Procexp.exe",
+      "procmon.exe"
+    ],
+    "fp_rate": 0.4706,
+    "rejected_date": "2026-03-21"
+  },
+  "gen_getprocaddress_with_recon_command": {
+    "reason": "false_positive",
+    "fp_files": [
+      "autoruns.exe",
+      "sigcheck.exe",
+      "handle.exe",
+      "listdlls.exe",
+      "logonsessions.exe",
+      "DNSQuerySniffer.exe",
+      "psinfo.exe",
+      "pslist.exe",
+      "Procexp.exe",
+      "procmon.exe"
+    ],
+    "fp_rate": 0.5882,
+    "rejected_date": "2026-03-21"
+  },
+  "gen_openprocesstoken_with_env_variable": {
+    "reason": "false_positive",
+    "fp_files": [
+      "autoruns.exe",
+      "sigcheck.exe",
+      "accesschk.exe",
+      "handle.exe",
+      "listdlls.exe",
+      "logonsessions.exe",
+      "Procexp.exe",
+      "procmon.exe"
+    ],
+    "fp_rate": 0.4706,
+    "rejected_date": "2026-03-21"
+  },
+  "gen_loadlibraryexw_with_browser_path": {
+    "reason": "false_positive",
+    "fp_files": [
+      "autoruns.exe",
+      "sigcheck.exe",
+      "accesschk.exe",
+      "handle.exe",
+      "listdlls.exe",
+      "logonsessions.exe",
+      "strings.exe",
+      "du.exe",
+      "whois.exe",
+      "tcpview.exe"
+    ],
+    "fp_rate": 0.8824,
+    "rejected_date": "2026-03-21"
+  },
+  "gen_loadlibraryexw_with_admin_share": {
+    "reason": "false_positive",
+    "fp_files": [
+      "autoruns.exe",
+      "sigcheck.exe",
+      "accesschk.exe",
+      "handle.exe",
+      "logonsessions.exe",
+      "strings.exe",
+      "du.exe",
+      "DNSQuerySniffer.exe",
+      "whois.exe",
+      "tcpview.exe"
+    ],
+    "fp_rate": 0.8824,
+    "rejected_date": "2026-03-21"
+  },
+  "gen_openprocesstoken_with_browser_path": {
+    "reason": "false_positive",
+    "fp_files": [
+      "autoruns.exe",
+      "sigcheck.exe",
+      "accesschk.exe",
+      "handle.exe",
+      "listdlls.exe",
+      "logonsessions.exe",
+      "tcpview.exe",
+      "Procexp.exe",
+      "procmon.exe"
+    ],
+    "fp_rate": 0.5294,
+    "rejected_date": "2026-03-21"
+  },
+  "gen_openprocesstoken_with_admin_share": {
+    "reason": "false_positive",
+    "fp_files": [
+      "autoruns.exe",
+      "sigcheck.exe",
+      "accesschk.exe",
+      "handle.exe",
+      "logonsessions.exe",
+      "tcpview.exe",
+      "Procexp.exe",
+      "procmon.exe"
+    ],
+    "fp_rate": 0.4706,
+    "rejected_date": "2026-03-21"
+  },
+  "gen_loadlibraryexw_with_env_variable": {
+    "reason": "false_positive",
+    "fp_files": [
+      "autoruns.exe",
+      "sigcheck.exe",
+      "accesschk.exe",
+      "handle.exe",
+      "listdlls.exe",
+      "logonsessions.exe",
+      "du.exe",
+      "DNSQuerySniffer.exe",
+      "psinfo.exe",
+      "Procexp.exe"
+    ],
+    "fp_rate": 0.6471,
+    "rejected_date": "2026-03-21"
+  },
+  "gen_adjusttokenprivileges_with_env_variable": {
+    "reason": "false_positive",
+    "fp_files": [
+      "autoruns.exe",
+      "accesschk.exe",
+      "handle.exe",
+      "listdlls.exe",
+      "logonsessions.exe",
+      "Procexp.exe",
+      "procmon.exe"
+    ],
+    "fp_rate": 0.4118,
+    "rejected_date": "2026-03-21"
+  },
+  "gen_virtualalloc_with_recon_command": {
+    "reason": "false_positive",
+    "fp_files": [
+      "autoruns.exe",
+      "Procexp.exe",
+      "procmon.exe"
+    ],
+    "fp_rate": 0.1765,
+    "rejected_date": "2026-03-21"
+  },
+  "gen_loadlibrarya_with_recon_command": {
+    "reason": "false_positive",
+    "fp_files": [
+      "listdlls.exe",
+      "procmon.exe"
+    ],
+    "fp_rate": 0.1176,
+    "rejected_date": "2026-03-21"
+  }
+}
