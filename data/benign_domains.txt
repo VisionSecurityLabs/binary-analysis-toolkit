@@ -1,0 +1,36 @@
+# Benign domains to exclude from C2 domain candidates.
+# These appear in PE metadata, certificates, and build tooling.
+# One domain per line. Subdomains are also filtered (e.g. update.microsoft.com).
+
+# Microsoft infrastructure
+microsoft.com
+windows.com
+windowsupdate.com
+live.com
+office.com
+azure.com
+
+# Certificate authorities
+digicert.com
+verisign.com
+symantec.com
+thawte.com
+globalsign.com
+godaddy.com
+letsencrypt.org
+amazontrust.com
+comodoca.com
+sectigo.com
+entrust.net
+
+# Browser vendors
+mozilla.org
+mozilla.com
+
+# XML / schema hosts
+w3.org
+xml.org
+xmlsoap.org
+openxmlformats.org
+apache.org
+schemas.com

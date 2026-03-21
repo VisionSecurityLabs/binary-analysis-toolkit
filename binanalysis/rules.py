@@ -10,6 +10,9 @@ from binanalysis.output import heading, subheading, info, warn, danger, detail
 logger = logging.getLogger(__name__)
 
 
+_SEVERITY_SCORES = {"critical": 10, "high": 7, "medium": 4, "low": 2}
+
+
 @dataclass
 class Rule:
     """A single behavioral detection rule."""
@@ -18,6 +21,7 @@ class Rule:
     severity: str          # critical | high | medium | low
     description: str
     check: Callable[[AnalysisContext], bool]
+    score: int | None = None  # optional weight for scoring; defaults from severity
 
 
 @dataclass
@@ -45,14 +49,18 @@ def run_behavioral_rules(ctx: AnalysisContext,
     all_rules = generic_rules + format_rules
 
     triggered = []
+    total_score = 0
     for rule in all_rules:
         try:
             if rule.check(ctx):
+                rule_score = rule.score if rule.score is not None else _SEVERITY_SCORES.get(rule.severity, 4)
+                total_score += rule_score
                 triggered.append({
                     "rule": rule.name,
                     "category": rule.category,
                     "severity": rule.severity,
                     "description": rule.description,
+                    "score": rule_score,
                 })
         except Exception as e:
             logger.warning("Rule '%s' failed: %s", rule.name, e)
@@ -64,6 +72,7 @@ def run_behavioral_rules(ctx: AnalysisContext,
     else:
         info("No clearly malicious behavioral patterns detected")
 
+    ctx.total_score = total_score
     return triggered
 
 

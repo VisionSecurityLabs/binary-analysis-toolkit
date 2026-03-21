@@ -13,13 +13,16 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import re
 import subprocess
 import sys
 from pathlib import Path
 
-from pipeline.generate_rules import RULES_OUT, SPECIMEN_OUT
+from pipeline.generate_rules import RULES_OUT, SPECIMEN_OUT, REJECTED_RULES_PATH
+
+VALIDATION_REPORT_PATH = Path("data/validation_report.json")
 
 # Generated rule files and their list variable names
 GENERATED_RULE_FILES = [
@@ -94,6 +97,28 @@ def remove_rules_from_file(filepath: Path, rules_to_remove: set[str]) -> int:
     return removed
 
 
+def _persist_rejections(false_positives: dict[str, list[str]], total_clean: int) -> None:
+    """Append false-positive rules to data/rejected_rules.json."""
+    rejected = {}
+    if REJECTED_RULES_PATH.exists():
+        try:
+            with open(REJECTED_RULES_PATH) as f:
+                rejected = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            pass
+    for rule, files in false_positives.items():
+        rejected[rule] = {
+            "reason": "false_positive",
+            "fp_files": files[:10],
+            "fp_rate": round(len(files) / total_clean, 4) if total_clean else 0,
+            "rejected_date": datetime.date.today().isoformat(),
+        }
+    REJECTED_RULES_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(REJECTED_RULES_PATH, "w") as f:
+        json.dump(rejected, f, indent=2)
+    print(f"  [*] Persisted {len(false_positives)} rejections → {REJECTED_RULES_PATH}")
+
+
 def validate(clean_dir: Path, report_only: bool = False) -> dict:
     """Validate generated rules against clean files. Returns validation report."""
     clean_files = list(clean_dir.glob("*.exe")) + list(clean_dir.glob("*.dll"))
@@ -152,14 +177,36 @@ def validate(clean_dir: Path, report_only: bool = False) -> dict:
                     print(f"  [-] Removed {removed} rules from {rule_file}")
                     total_removed += removed
             print(f"  [*] Total removed: {total_removed} false-positive rules")
+            _persist_rejections(false_positives, len(clean_files))
         else:
             print(f"\n[*] --report-only: no rules were removed")
 
-    return {
+    # Build per-rule FP rate report
+    fp_report = {}
+    for rule in all_generated:
+        files = false_positives.get(rule, [])
+        fp_report[rule] = {
+            "fp_count": len(files),
+            "total_clean": len(clean_files),
+            "fp_rate": round(len(files) / len(clean_files), 4) if clean_files else 0,
+            "triggered_on": files[:10],
+            "passed": len(files) == 0,
+        }
+
+    # Save validation report
+    validation_result = {
+        "date": datetime.date.today().isoformat(),
         "clean_files": len(clean_files),
         "generated_rules": len(all_generated),
-        "false_positives": false_positives,
+        "rules_with_fp": len(false_positives),
+        "per_rule": fp_report,
     }
+    VALIDATION_REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(VALIDATION_REPORT_PATH, "w") as f:
+        json.dump(validation_result, f, indent=2)
+    print(f"\n[*] Validation report → {VALIDATION_REPORT_PATH}")
+
+    return validation_result
 
 
 def main():
