@@ -23,6 +23,7 @@ import textwrap
 from pathlib import Path
 
 REPORT_DEFAULT = Path("enrichment_report.json")
+REJECTED_RULES_PATH = Path("data/rejected_rules.json")
 
 RULES_OUT = Path("binanalysis/formats/pe/rules/generated.py")
 SPECIMEN_OUT = Path("binanalysis/formats/pe/rules/generated_specimen.py")
@@ -96,41 +97,129 @@ def _infer_pair_category(a: str, b: str) -> str:
     return "suspicious_api"
 
 
-def generate_rules(report: dict, min_pct: float) -> str:
-    """Generate behavioral rules from uncovered API pairs only.
+def _load_rejected_rules() -> set[str]:
+    """Load previously rejected rule names from data/rejected_rules.json."""
+    if REJECTED_RULES_PATH.exists():
+        try:
+            with open(REJECTED_RULES_PATH) as f:
+                return set(json.load(f).keys())
+        except (json.JSONDecodeError, OSError):
+            pass
+    return set()
 
-    Single-API rules are intentionally excluded — they are too broad and
-    would fire on legitimate software. Only API combinations that span
-    different categories (e.g. injection + network) are generated, and
-    pairs where both APIs are common benign calls are skipped.
+
+def _load_existing_rules() -> set[str]:
+    """Load rule names already in generated.py for differential runs."""
+    if not RULES_OUT.exists():
+        return set()
+    return set(re.findall(r'Rule\("([^"]+)"', RULES_OUT.read_text()))
+
+
+def _infer_multi_category(apis: list[str]) -> str:
+    """Pick the most severe category from a list of APIs."""
+    cats = [_infer_category(a) for a in apis]
+    order = ["injection", "privilege_escalation", "persistence", "network", "execution", "crypto", "suspicious_api"]
+    for cat in order:
+        if cat in cats:
+            return cat
+    return "suspicious_api"
+
+
+def generate_rules(report: dict, min_pct: float) -> str:
+    """Generate behavioral rules from API pairs, triples, and import+string combos.
+
+    Filters:
+    - Pairs: skip if either API is benign, require cross-category
+    - Triples: allow at most 1 benign API, require 2+ categories
+    - Import+string: skip benign APIs unless string category is high-value
+    - All: skip previously rejected or already existing rules
     """
     cands = report.get("enrichment_candidates", {})
-    api_pairs = cands.get("uncovered_api_pairs", [])
+    rejected = _load_rejected_rules()
+    existing = _load_existing_rules()
+    skip = rejected | existing
 
     rules: list[str] = []
 
-    for entry in api_pairs:
+    # ── API pair rules ──────────────────────────────────────────────────
+    for entry in cands.get("uncovered_api_pairs", []):
         a, b = entry["pair"]
         pct = entry["pct"]
         if pct < min_pct:
             continue
-        # Skip if both APIs are too common in legitimate software
-        if a in BENIGN_COMMON_APIS and b in BENIGN_COMMON_APIS:
+        if a in BENIGN_COMMON_APIS or b in BENIGN_COMMON_APIS:
             continue
-        # Prefer cross-category pairs (e.g. injection + network) — they're
-        # more distinctive than same-category pairs
         cat_a = _infer_category(a)
         cat_b = _infer_category(b)
+        if cat_a == cat_b:
+            continue
+        slug = _slugify(f"gen_{a}_{b}")
+        if slug in skip:
+            continue
         cat = _infer_pair_category(a, b)
         sev = SEVERITY_BY_CATEGORY.get(cat, "medium")
-        # Boost severity for cross-category combos
         if cat_a != cat_b and sev == "medium":
             sev = "high"
-        slug = _slugify(f"gen_{a}_{b}")
         rules.append(
             f'    Rule("{slug}", "{cat}", "{sev}",\n'
-            f'         "Auto-generated: {a} + {b} ({{pct}}% of corpus)",\n'
-            f'         lambda ctx: ctx.has_all_imports("{a}", "{b}")),'.replace("{pct}", str(pct))
+            f'         "Auto-generated: {a} + {b} ({pct}% of corpus)",\n'
+            f'         lambda ctx: ctx.has_all_imports("{a}", "{b}")),'
+        )
+
+    # ── API triple rules (more specific, less likely to FP) ─────────────
+    for entry in cands.get("uncovered_api_triples", []):
+        a, b, c = entry["triple"]
+        pct = entry["pct"]
+        if pct < min_pct:
+            continue
+        # Allow at most 1 of 3 APIs to be benign-common
+        benign_count = sum(1 for x in (a, b, c) if x in BENIGN_COMMON_APIS)
+        if benign_count > 1:
+            continue
+        # Require at least 2 different categories
+        cats = {_infer_category(x) for x in (a, b, c)}
+        if len(cats) < 2:
+            continue
+        slug = _slugify(f"gen_{a}_{b}_{c}")
+        if slug in skip:
+            continue
+        cat = _infer_multi_category([a, b, c])
+        sev = SEVERITY_BY_CATEGORY.get(cat, "medium")
+        if len(cats) >= 2 and sev == "medium":
+            sev = "high"
+        rules.append(
+            f'    Rule("{slug}", "{cat}", "{sev}",\n'
+            f'         "Auto-generated: {a} + {b} + {c} ({pct}% of corpus)",\n'
+            f'         lambda ctx: ctx.has_all_imports("{a}", "{b}", "{c}")),'
+        )
+
+    # ── Import + string category rules (API + behavioral context) ───────
+    # High-value string categories that justify generating a rule even
+    # with a benign API (the string context provides specificity)
+    _HIGH_VALUE_CATS = {
+        "registry_key", "github_pat", "github_token", "bearer_token",
+        "ms_oauth", "mimikatz_command", "dcsync_indicator",
+        "kerberos_attack", "gmsa_attack", "recon_command",
+    }
+    for entry in cands.get("uncovered_import_string_combos", []):
+        api = entry["import"]
+        cat_str = entry["string_category"]
+        pct = entry["pct"]
+        if pct < min_pct:
+            continue
+        if api in BENIGN_COMMON_APIS and cat_str not in _HIGH_VALUE_CATS:
+            continue
+        slug = _slugify(f"gen_{api}_with_{cat_str}")
+        if slug in skip:
+            continue
+        cat = _infer_category(api)
+        sev = SEVERITY_BY_CATEGORY.get(cat, "medium")
+        if cat_str in _HIGH_VALUE_CATS:
+            sev = "high"
+        rules.append(
+            f'    Rule("{slug}", "{cat}", "{sev}",\n'
+            f'         "Auto-generated: {api} + [{cat_str}] ({pct}% of corpus)",\n'
+            f'         lambda ctx: ctx.has_import("{api}") and ctx.has_finding("{cat_str}")),'
         )
 
     if not rules:

@@ -19,7 +19,7 @@ SUSPICIOUS_STRING_PATTERNS = [
     # ── URLs and domains ──
     StringPattern(r'https?://[^\x00\s]{5,200}', "url", 4),
     StringPattern(
-        r'[a-zA-Z0-9][-a-zA-Z0-9]{1,}\.(com|net|org|io|xyz|top|ru|cn|tk|onion)\b',
+        r'(?<!\.[A-Za-z0-9])[a-zA-Z0-9][-a-zA-Z0-9]{1,}\.(com|net|org|io|xyz|top|ru|cn|tk|onion)\b',
         "domain", 2,
         requires=["url", "user_agent", "github_api", "ms_oauth"],
     ),

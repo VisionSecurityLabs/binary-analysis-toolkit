@@ -1,0 +1,43 @@
+# Subdomains commonly abused for C2, dead drops, and payload hosting.
+# One pattern per line. Matched as substring against full domain.
+
+# Code hosting / paste services (dead drops)
+raw.githubusercontent.com
+gist.githubusercontent.com
+paste.ee
+pastebin.com
+ghostbin.com
+hastebin.com
+dpaste.org
+rentry.co
+
+# File hosting (payload delivery)
+transfer.sh
+file.io
+temp.sh
+cdn.discordapp.com
+media.discordapp.net
+
+# Cloud service abuse
+firebaseio.com
+appspot.com
+cloudfront.net
+workers.dev
+pages.dev
+netlify.app
+vercel.app
+herokuapp.com
+azurewebsites.net
+blob.core.windows.net
+
+# URL shorteners (redirect C2)
+bit.ly
+tinyurl.com
+is.gd
+t.co
+
+# Google services (Docs/Sheets C2)
+docs.google.com
+sheets.google.com
+drive.google.com
+script.google.com

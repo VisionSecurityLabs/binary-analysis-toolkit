@@ -1,10 +1,40 @@
 """IOC extractors — each pulls one category of indicators from the analysis context."""
 
+from pathlib import Path
+
 from binanalysis.rules import IOCExtractor
+
+_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+
+
+def _load_suspicious_subdomains() -> list[str]:
+    """Load suspicious subdomain patterns for domain classification."""
+    path = _DATA_DIR / "suspicious_subdomains.txt"
+    if not path.exists():
+        return []
+    return [line.strip() for line in path.read_text().splitlines()
+            if line.strip() and not line.strip().startswith("#")]
+
+
+_SUSPICIOUS_SUBDOMAINS = _load_suspicious_subdomains()
+
+
+def _extract_suspicious_domains(ctx) -> list[str]:
+    """Extract domains that match known suspicious subdomain patterns."""
+    results = []
+    for item in ctx.string_findings.get("domain", []):
+        domain = item["value"]
+        if any(sub in domain for sub in _SUSPICIOUS_SUBDOMAINS):
+            results.append(domain)
+    return results
+
 
 IOC_EXTRACTORS: list[IOCExtractor] = [
     IOCExtractor("urls", "URLs", "warn",
                  lambda ctx: [i["value"] for i in ctx.string_findings.get("url", [])]),
+
+    IOCExtractor("suspicious_domains", "Suspicious Domains (C2/hosting)", "warn",
+                 _extract_suspicious_domains),
 
     IOCExtractor("domains", "Domains", "info",
                  lambda ctx: [i["value"] for i in ctx.string_findings.get("domain", [])]),

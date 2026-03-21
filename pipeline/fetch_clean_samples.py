@@ -44,6 +44,20 @@ NIRSOFT = [
     "https://www.nirsoft.net/utils/cports.zip",
 ]
 
+# Additional well-known tools (broadens FP coverage)
+ADDITIONAL_TOOLS = [
+    "https://www.7-zip.org/a/7z2408-x64.exe",
+    "https://www.python.org/ftp/python/3.12.0/python-3.12.0-embed-amd64.zip",
+]
+
+# .NET framework assemblies (copied from local system if available)
+DOTNET_ASSEMBLIES = [
+    Path(r"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\mscorlib.dll"),
+    Path(r"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\System.dll"),
+    Path(r"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\System.Core.dll"),
+    Path(r"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\System.Net.dll"),
+]
+
 
 def download_file(url: str, out_dir: Path) -> bool:
     name = url.rsplit("/", 1)[-1]
@@ -80,10 +94,29 @@ def extract_zips(out_dir: Path) -> None:
             print(f"  [!] Failed to extract {zf_path.name}: {e}")
 
 
+def copy_system_assemblies(out_dir: Path) -> None:
+    """Copy .NET framework DLLs from the local system if available."""
+    import shutil
+    copied = 0
+    for src in DOTNET_ASSEMBLIES:
+        if src.exists():
+            dst = out_dir / src.name
+            if not dst.exists():
+                shutil.copy2(src, dst)
+                print(f"  [+] {src.name} (system copy)")
+                copied += 1
+            else:
+                print(f"  [=] {src.name} (already exists)")
+    if not copied:
+        print("  [*] No .NET assemblies found on this system (expected on non-Windows)")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Download known-clean PEs for validation")
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT,
                         help=f"Output directory (default: {DEFAULT_OUT})")
+    parser.add_argument("--include-system", action="store_true",
+                        help="Copy .NET framework DLLs from the local system")
     args = parser.parse_args()
 
     args.out.mkdir(parents=True, exist_ok=True)
@@ -96,8 +129,16 @@ def main():
     for url in NIRSOFT:
         download_file(url, args.out)
 
+    print(f"\n[*] Downloading additional tools ({len(ADDITIONAL_TOOLS)} files)")
+    for url in ADDITIONAL_TOOLS:
+        download_file(url, args.out)
+
     print(f"\n[*] Extracting ZIP archives")
     extract_zips(args.out)
+
+    if args.include_system:
+        print(f"\n[*] Copying .NET framework assemblies")
+        copy_system_assemblies(args.out)
 
     total = len(list(args.out.glob("*.exe")) + list(args.out.glob("*.dll")))
     print(f"\n[*] Done — {total} clean PE files in {args.out}/")

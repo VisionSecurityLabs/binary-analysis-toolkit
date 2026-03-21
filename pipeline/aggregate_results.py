@@ -47,6 +47,43 @@ COVERED_IMPORT_COMBOS = [
 ]
 
 
+_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+
+_FALLBACK_BENIGN_DOMAINS = {
+    "microsoft.com", "windows.com", "windowsupdate.com",
+    "live.com", "office.com", "azure.com",
+    "digicert.com", "verisign.com", "symantec.com", "thawte.com",
+    "globalsign.com", "godaddy.com", "letsencrypt.org",
+    "amazontrust.com", "comodoca.com",
+    "mozilla.org", "mozilla.com",
+    "w3.org", "xml.org", "xmlsoap.org", "openxmlformats.org",
+    "apache.org", "schemas.com",
+}
+
+
+def _load_lines(filepath: Path) -> list[str]:
+    """Load non-empty, non-comment lines from a text file."""
+    if not filepath.exists():
+        return []
+    lines = []
+    for line in filepath.read_text().splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            lines.append(line)
+    return lines
+
+
+def _load_benign_domains() -> set[str]:
+    """Load benign domains from data/benign_domains.txt, fallback to hardcoded set."""
+    lines = _load_lines(_DATA_DIR / "benign_domains.txt")
+    return set(lines) if lines else _FALLBACK_BENIGN_DOMAINS
+
+
+def _load_suspicious_subdomains() -> list[str]:
+    """Load suspicious subdomain patterns from data/suspicious_subdomains.txt."""
+    return _load_lines(_DATA_DIR / "suspicious_subdomains.txt")
+
+
 def _flat_imports(report: dict) -> set[str]:
     """Flatten the imports dict (dll → [funcs]) into a set of function names."""
     imports = report.get("format_specific", {}).get("imports", {})
@@ -180,16 +217,40 @@ def aggregate(reports: list[dict]) -> dict:
         "GetProcAddress", "LoadLibrary",
     )
 
+    # Triple frequency (for more specific combo rules)
+    triple_freq: Counter[tuple] = Counter()
+    # Import + string category co-occurrence
+    import_string_freq: Counter[tuple] = Counter()
+
     for r in reports:
         imports = _flat_imports(r)
         api_freq.update(imports)
-        suspicious_apis = [
+        suspicious_apis = sorted([
             a for a in imports
             if any(a.startswith(p) for p in _SUSPICIOUS_PREFIXES)
-        ]
+        ])
         for i, a in enumerate(suspicious_apis):
             for b in suspicious_apis[i + 1 :]:
                 pair_freq[tuple(sorted([a, b]))] += 1
+
+        # Track import + string category co-occurrence
+        string_cats = set(r.get("generic", {}).get("strings", {}).keys())
+        for api in suspicious_apis:
+            for cat in string_cats:
+                import_string_freq[(api, cat)] += 1
+
+    # Build triples only from APIs that individually appear in >10% of corpus
+    # to avoid combinatorial explosion
+    frequent_threshold = max(1, int(0.1 * total))
+    frequent_apis = {a for a, c in api_freq.items() if c >= frequent_threshold
+                     and any(a.startswith(p) for p in _SUSPICIOUS_PREFIXES)}
+    for r in reports:
+        imports = _flat_imports(r)
+        sample_frequent = sorted(imports & frequent_apis)
+        for i, a in enumerate(sample_frequent):
+            for j, b in enumerate(sample_frequent[i + 1:], i + 1):
+                for c in sample_frequent[j + 1:]:
+                    triple_freq[(a, b, c)] += 1
 
     # ── String pattern mining ──────────────────────────────────────────────
     url_pattern = re.compile(r"https?://[^\s\"'<>]{4,}", re.IGNORECASE)
@@ -245,6 +306,17 @@ def aggregate(reports: list[dict]) -> dict:
         if not _is_covered({a, b}) and should_suggest(count, total, "import_combo"):
             gap_pairs.append({"pair": [a, b], "count": count, "pct": round(100 * count / total, 1)})
 
+    gap_triples: list[dict] = []
+    for (a, b, c), count in triple_freq.most_common(100):
+        if not _is_covered({a, b, c}) and should_suggest(count, total, "import_combo"):
+            gap_triples.append({"triple": [a, b, c], "count": count, "pct": round(100 * count / total, 1)})
+
+    import_string_hits: list[dict] = []
+    for (api, cat), count in import_string_freq.most_common(50):
+        if should_suggest(count, total, "import_combo"):
+            import_string_hits.append({"import": api, "string_category": cat,
+                                       "count": count, "pct": round(100 * count / total, 1)})
+
     url_hits = [
         {"pattern": u, "count": c, "pct": round(100 * c / total, 1)}
         for u, c in url_candidates.most_common(20)
@@ -255,11 +327,24 @@ def aggregate(reports: list[dict]) -> dict:
         for r, c in registry_candidates.most_common(20)
         if should_suggest(c, total, "string_registry")
     ]
-    domain_hits = [
-        {"domain": d, "count": c, "pct": round(100 * c / total, 1)}
-        for d, c in domain_freq.most_common(20)
-        if should_suggest(c, total, "ioc_domain")
-    ]
+    # Filter out benign/common domains and .NET namespaces that the domain
+    # regex picks up as false positives (e.g. System.IO → .io TLD).
+    _BENIGN_DOMAINS = _load_benign_domains()
+    _DOTNET_NAMESPACE_RE = re.compile(
+        r"^(?:System|Microsoft|Windows|Mono|Internal)\.[A-Z]",
+    )
+    suspicious_subdomains = _load_suspicious_subdomains()
+    domain_hits = []
+    for d, c in domain_freq.most_common(20):
+        if not should_suggest(c, total, "ioc_domain"):
+            continue
+        if d in _BENIGN_DOMAINS or any(d.endswith("." + b) for b in _BENIGN_DOMAINS):
+            continue
+        if _DOTNET_NAMESPACE_RE.match(d):
+            continue
+        is_suspicious = any(sub in d for sub in suspicious_subdomains)
+        domain_hits.append({"domain": d, "count": c, "pct": round(100 * c / total, 1),
+                            "suspicious_subdomain": is_suspicious})
 
     # ── Per-family analysis (for specimen rule generation) ───────────────
     family_profiles: dict[str, dict] = {}
@@ -319,6 +404,8 @@ def aggregate(reports: list[dict]) -> dict:
         "enrichment_candidates": {
             "uncovered_single_apis": gap_apis,
             "uncovered_api_pairs": gap_pairs[:30],
+            "uncovered_api_triples": gap_triples[:50],
+            "uncovered_import_string_combos": import_string_hits[:30],
             "recurring_urls": url_hits,
             "recurring_registry_keys": reg_hits,
             "recurring_c2_domains": domain_hits,
@@ -349,6 +436,18 @@ def print_summary(report: dict) -> None:
         print("\n── Uncovered API Pairs (combo rule candidates) ───────────")
         for c in cands["uncovered_api_pairs"][:10]:
             print(f"  {c['pair'][0]} + {c['pair'][1]}")
+            print(f"    → {c['count']} samples ({c['pct']}%)")
+
+    if cands.get("uncovered_api_triples"):
+        print("\n── Uncovered API Triples (high-specificity candidates) ───")
+        for c in cands["uncovered_api_triples"][:10]:
+            print(f"  {c['triple'][0]} + {c['triple'][1]} + {c['triple'][2]}")
+            print(f"    → {c['count']} samples ({c['pct']}%)")
+
+    if cands.get("uncovered_import_string_combos"):
+        print("\n── Import + String Co-occurrence ─────────────────────────")
+        for c in cands["uncovered_import_string_combos"][:10]:
+            print(f"  {c['import']} + [{c['string_category']}]")
             print(f"    → {c['count']} samples ({c['pct']}%)")
 
     if cands["recurring_urls"]:
