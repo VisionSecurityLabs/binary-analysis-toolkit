@@ -172,9 +172,10 @@ def generate_rules(report: dict, min_pct: float) -> str:
         pct = entry["pct"]
         if pct < min_pct:
             continue
-        # Allow at most 1 of 3 APIs to be benign-common
-        benign_count = sum(1 for x in (a, b, c) if x in BENIGN_COMMON_APIS)
-        if benign_count > 1:
+        # All 3 APIs must be non-benign — adding common APIs to a triple
+        # doesn't increase specificity (e.g. LoadLibraryExW + OpenProcessToken
+        # + RegCreateKeyExW still fires on SysInternals tools)
+        if any(x in BENIGN_COMMON_APIS for x in (a, b, c)):
             continue
         # Require at least 2 different categories
         cats = {_infer_category(x) for x in (a, b, c)}
@@ -194,12 +195,12 @@ def generate_rules(report: dict, min_pct: float) -> str:
         )
 
     # ── Import + string category rules (API + behavioral context) ───────
-    # High-value string categories that justify generating a rule even
-    # with a benign API (the string context provides specificity)
-    _HIGH_VALUE_CATS = {
-        "registry_key", "github_pat", "github_token", "bearer_token",
-        "ms_oauth", "mimikatz_command", "dcsync_indicator",
-        "kerberos_attack", "gmsa_attack", "recon_command",
+    # Only non-benign APIs are worth combining with string context.
+    # String categories that are too common in legitimate system tools
+    # (SysInternals, admin utilities) are excluded entirely.
+    _NOISY_STRING_CATS = {
+        "env_variable", "browser_path", "admin_share", "recon_command",
+        "windows_path", "registry_key", "uuid",
     }
     for entry in cands.get("uncovered_import_string_combos", []):
         api = entry["import"]
@@ -207,15 +208,15 @@ def generate_rules(report: dict, min_pct: float) -> str:
         pct = entry["pct"]
         if pct < min_pct:
             continue
-        if api in BENIGN_COMMON_APIS and cat_str not in _HIGH_VALUE_CATS:
+        if api in BENIGN_COMMON_APIS:
+            continue
+        if cat_str in _NOISY_STRING_CATS:
             continue
         slug = _slugify(f"gen_{api}_with_{cat_str}")
         if slug in skip:
             continue
         cat = _infer_category(api)
         sev = SEVERITY_BY_CATEGORY.get(cat, "medium")
-        if cat_str in _HIGH_VALUE_CATS:
-            sev = "high"
         rules.append(
             f'    Rule("{slug}", "{cat}", "{sev}",\n'
             f'         "Auto-generated: {api} + [{cat_str}] ({pct}% of corpus)",\n'
