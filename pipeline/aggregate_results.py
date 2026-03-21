@@ -263,8 +263,6 @@ def aggregate(reports: list[dict]) -> dict:
         "digicert.com", "verisign.com", "symantec.com", "thawte.com",
         "globalsign.com", "godaddy.com", "letsencrypt.org",
         "amazontrust.com", "comodoca.com",
-        "google.com", "googleapis.com", "gstatic.com",
-        "github.com", "github.io",
         "mozilla.org", "mozilla.com",
         "w3.org", "xml.org", "xmlsoap.org", "openxmlformats.org",
         "apache.org", "schemas.com",
