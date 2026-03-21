@@ -5,7 +5,7 @@ Review before committing. Merge useful extractors into ioc.py.
 
 from binanalysis.rules import IOCExtractor
 
-_KNOWN_C2_DOMAINS = ['BreakingSecurity.net', 'geoplugin.net']
+_KNOWN_C2_DOMAINS = ['BreakingSecurity.net']
 
 GENERATED_IOC_EXTRACTORS: list[IOCExtractor] = [
     IOCExtractor("c2_domains", "Known C2 Domains (corpus)", "danger",
