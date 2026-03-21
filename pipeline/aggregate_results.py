@@ -259,8 +259,10 @@ def aggregate(reports: list[dict]) -> dict:
     # regex picks up as false positives (e.g. System.IO → .io TLD).
     _BENIGN_DOMAINS = {
         "microsoft.com", "windows.com", "windowsupdate.com",
+        "live.com", "office.com", "azure.com",
         "digicert.com", "verisign.com", "symantec.com", "thawte.com",
         "globalsign.com", "godaddy.com", "letsencrypt.org",
+        "amazontrust.com", "comodoca.com",
         "google.com", "googleapis.com", "gstatic.com",
         "github.com", "github.io",
         "mozilla.org", "mozilla.com",
