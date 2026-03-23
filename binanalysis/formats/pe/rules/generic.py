@@ -71,7 +71,8 @@ PE_GENERIC_RULES: list[Rule] = [
 
     Rule("token_manipulation", "privilege_escalation", "high",
          "Token privilege escalation (OpenProcessToken + AdjustTokenPrivileges)",
-         lambda ctx: ctx.has_all_imports("OpenProcessToken", "AdjustTokenPrivileges")),
+         lambda ctx: ctx.has_all_imports("OpenProcessToken", "AdjustTokenPrivileges")
+                     and not ctx.is_installer),
 
     Rule("token_impersonation", "privilege_escalation", "high",
          "Token impersonation / duplication",
@@ -100,11 +101,13 @@ PE_GENERIC_RULES: list[Rule] = [
     # ── Execution ──
     Rule("process_creation", "execution", "medium",
          "Creates child processes",
-         lambda ctx: ctx.has_import("CreateProcessA", "CreateProcessW", "WinExec")),
+         lambda ctx: ctx.has_import("CreateProcessA", "CreateProcessW", "WinExec")
+                     and not ctx.is_installer),
 
     Rule("shellexecute", "execution", "medium",
          "Launches programs via ShellExecute",
-         lambda ctx: ctx.has_import("ShellExecuteA", "ShellExecuteW", "ShellExecuteExW")),
+         lambda ctx: ctx.has_import("ShellExecuteA", "ShellExecuteW", "ShellExecuteExW")
+                     and not ctx.is_installer),
 
     Rule("dynamic_api_resolution", "execution", "medium",
          "Dynamically resolves APIs (GetProcAddress + LoadLibrary)",

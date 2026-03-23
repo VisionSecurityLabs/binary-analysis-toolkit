@@ -14,6 +14,8 @@ from binanalysis.settings import parse_args, build_settings
 from binanalysis.integrations.unpacker import try_unpack_upx
 from binanalysis.integrations.llm_report import generate_llm_report
 from binanalysis.integrations.html_report import save_html_report
+from binanalysis.integrations.vt_lookup import lookup_hash
+from binanalysis.generic.path_context import analyze_path_context
 
 # Import format backends to trigger registration
 import binanalysis.formats.pe  # noqa: F401
@@ -23,8 +25,9 @@ from binanalysis.integrations.yara_runner import run_yara_scan, download_communi
 from binanalysis.integrations.decompiler import run_decompilation
 
 
-def classify(behaviors: list[dict], capa_results: list[dict], yara_results: list[dict]):
-    """Print final verdict combining custom rules, capa capabilities, and YARA matches."""
+def classify(behaviors: list[dict], capa_results: list[dict], yara_results: list[dict],
+             legitimacy: dict | None = None):
+    """Print final verdict combining custom rules, capa capabilities, YARA matches, and legitimacy signals."""
     heading("CLASSIFICATION")
 
     counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
@@ -48,16 +51,50 @@ def classify(behaviors: list[dict], capa_results: list[dict], yara_results: list
     if yara_suspicious:
         counts["medium"] += 1
 
+    # --- Legitimacy signals can downgrade the verdict ---
+    leg = legitimacy or {}
+    legitimacy_hints = []
+
+    if leg.get("is_installer"):
+        legitimacy_hints.append(f"Known installer framework: {leg.get('framework', '?')}")
+    if leg.get("signed"):
+        signer = leg.get("signer", "unknown")
+        legitimacy_hints.append(f"Digitally signed by: {signer}")
+    if leg.get("known_software"):
+        legitimacy_hints.append(f"Known software path: {leg.get('known_software')}")
+    if leg.get("vt_clean"):
+        legitimacy_hints.append(f"VirusTotal: {leg.get('vt_detection', '0/0')} detections")
+
+    has_strong_legitimacy = len(legitimacy_hints) >= 2
+
     if counts["critical"] > 0:
-        danger("VERDICT: MALICIOUS — Critical indicators detected")
+        if has_strong_legitimacy:
+            warn("VERDICT: SUSPICIOUS — Critical indicators but strong legitimacy signals present")
+            info("Review legitimacy signals below — this may be a false positive")
+        else:
+            danger("VERDICT: MALICIOUS — Critical indicators detected")
     elif counts["high"] >= 2:
-        danger("VERDICT: LIKELY MALICIOUS — Multiple high-severity indicators")
+        if has_strong_legitimacy:
+            warn("VERDICT: SUSPICIOUS — High-severity indicators mitigated by legitimacy signals")
+        else:
+            danger("VERDICT: LIKELY MALICIOUS — Multiple high-severity indicators")
     elif counts["high"] >= 1:
-        warn("VERDICT: SUSPICIOUS — High-severity indicators present")
+        if has_strong_legitimacy:
+            info("VERDICT: LIKELY BENIGN — Indicators consistent with legitimate software")
+        else:
+            warn("VERDICT: SUSPICIOUS — High-severity indicators present")
     elif counts["medium"] >= 2:
-        warn("VERDICT: SUSPICIOUS — Multiple medium-severity indicators")
+        if has_strong_legitimacy:
+            info("VERDICT: LIKELY BENIGN — Indicators consistent with legitimate software")
+        else:
+            warn("VERDICT: SUSPICIOUS — Multiple medium-severity indicators")
     else:
         info("VERDICT: No strong malicious indicators (may require dynamic analysis)")
+
+    if legitimacy_hints:
+        subheading("Legitimacy Signals")
+        for hint in legitimacy_hints:
+            print(f"      {C.GREEN}[LEGIT]{C.RESET} {hint}")
 
     if behaviors:
         subheading("Custom Rules")
@@ -128,6 +165,9 @@ def main():
     ascii_set = {s for _, s in ascii_raw}
     wide_set = {s for _, s in wide_raw}
 
+    # Path context analysis (before format-specific)
+    path_context = analyze_path_context(args.file)  # use original path, not unpacked
+
     # Generic analysis
     generic_results = {
         "ascii_set": ascii_set,
@@ -172,8 +212,31 @@ def main():
     else:
         decompile_results = {}
 
+    # VirusTotal lookup
+    if settings.run_vt:
+        vt_results = lookup_hash(generic_results["hashes"]["sha256"])
+    else:
+        vt_results = {}
+
+    # Build legitimacy signals for verdict
+    fmt_results = generic_results.get("format_specific", {})
+    legitimacy = {}
+    installer_info = fmt_results.get("installer", {})
+    if installer_info.get("is_installer"):
+        legitimacy["is_installer"] = True
+        legitimacy["framework"] = installer_info.get("framework", "")
+    sig_info = fmt_results.get("signature", {})
+    if sig_info.get("signed"):
+        legitimacy["signed"] = True
+        legitimacy["signer"] = sig_info.get("signer", "unknown")
+    if path_context.get("known_software"):
+        legitimacy["known_software"] = path_context["known_software"]
+    if vt_results.get("found") and vt_results.get("malicious", 999) == 0:
+        legitimacy["vt_clean"] = True
+        legitimacy["vt_detection"] = vt_results.get("detection_ratio", "0/0")
+
     # Verdict
-    classify(behaviors, capa_results, yara_results)
+    classify(behaviors, capa_results, yara_results, legitimacy=legitimacy)
 
     results = {
         "generic": {
@@ -183,13 +246,16 @@ def main():
                 for k, v in generic_results["strings"].items()
             },
             "dynamic_apis": generic_results["dynamic_apis"],
+            "path_context": path_context,
         },
-        "format_specific": generic_results.get("format_specific", {}),
+        "format_specific": fmt_results,
         "behavior": {"behaviors": behaviors},
         "iocs": iocs,
         "capa": capa_results,
         "yara": yara_results,
         "decompile": decompile_results,
+        "virustotal": vt_results,
+        "legitimacy": legitimacy,
     }
     generate_report(filepath, results)
     html_path = save_html_report(results, filepath)

@@ -11,6 +11,9 @@ from binanalysis.formats.pe.analysis import (
     analyze_exports, analyze_resources, analyze_version_info,
     analyze_tls, analyze_compiler,
 )
+from binanalysis.formats.pe.installer import detect_installer
+from binanalysis.formats.pe.manifest import extract_manifest
+from binanalysis.formats.pe.signature import analyze_signature
 from binanalysis.formats.pe.rules import PE_RULES
 from binanalysis.output import heading
 
@@ -31,6 +34,9 @@ def analyze_pe(filepath: Path, data: bytes, generic_results: dict) -> PEContext:
     results["version_info"] = analyze_version_info(pe)
     results["tls"] = analyze_tls(pe)
     results["compiler"] = analyze_compiler(data, pe, ascii_strs=ascii_set, wide_strs=wide_set)
+    results["installer"] = detect_installer(data, pe)
+    results["manifest"] = extract_manifest(pe, data)
+    results["signature"] = analyze_signature(pe, data)
 
     from binanalysis.formats.pe.dotnet_analyzer import run_dotnet_analysis
     results["dotnet"] = run_dotnet_analysis(filepath, pe)
@@ -57,6 +63,8 @@ def analyze_pe(filepath: Path, data: bytes, generic_results: dict) -> PEContext:
         dynamic_apis=generic_results.get("dynamic_apis", []),
         exports=results["exports"],
         dotnet=results["dotnet"],
+        is_installer=results.get("installer", {}).get("is_installer", False),
+        is_signed=results.get("signature", {}).get("signed", False),
     )
 
 

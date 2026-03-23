@@ -7,23 +7,32 @@ from binanalysis.rules import IOCExtractor
 _DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 
-def _load_suspicious_subdomains() -> list[str]:
-    """Load suspicious subdomain patterns for domain classification."""
-    path = _DATA_DIR / "suspicious_subdomains.txt"
+def _load_line_list(filename: str) -> list[str]:
+    """Load a line-delimited file, stripping comments and blanks."""
+    path = _DATA_DIR / filename
     if not path.exists():
         return []
     return [line.strip() for line in path.read_text().splitlines()
             if line.strip() and not line.strip().startswith("#")]
 
 
-_SUSPICIOUS_SUBDOMAINS = _load_suspicious_subdomains()
+_SUSPICIOUS_SUBDOMAINS = _load_line_list("suspicious_subdomains.txt")
+_BENIGN_DOMAINS = _load_line_list("benign_domains.txt")
+
+
+def _is_benign_domain(domain: str) -> bool:
+    """Check if a domain matches the benign domains list (including subdomains)."""
+    dl = domain.lower()
+    return any(dl == bd or dl.endswith("." + bd) for bd in _BENIGN_DOMAINS)
 
 
 def _extract_suspicious_domains(ctx) -> list[str]:
-    """Extract domains that match known suspicious subdomain patterns."""
+    """Extract domains that match known suspicious subdomain patterns, excluding benign domains."""
     results = []
     for item in ctx.string_findings.get("domain", []):
         domain = item["value"]
+        if _is_benign_domain(domain):
+            continue
         if any(sub in domain for sub in _SUSPICIOUS_SUBDOMAINS):
             results.append(domain)
     return results

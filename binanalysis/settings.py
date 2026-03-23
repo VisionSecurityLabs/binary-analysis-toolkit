@@ -56,8 +56,7 @@ class Settings:
     run_capa: bool = False
     run_yara: bool = False
     run_decompile: str = ""  # "", "r2", "ghidra", "both"
-
-
+    run_vt: bool = False
 
     # LLM report
     llm_url: str = "http://ollama:11434"
@@ -98,6 +97,7 @@ def parse_args():
     parser.add_argument("--llm-model", type=str, help="LLM model name (default: qwen3.5)")
     parser.add_argument("--llm-timeout", type=int, help="LLM request timeout in seconds (default: 600)")
     parser.add_argument("--debug", action="store_true", help="Save LLM prompt to file for inspection")
+    parser.add_argument("--vt", action="store_true", help="Query VirusTotal for hash reputation (requires VT_API_KEY env var)")
     parser.add_argument("--update-yara", action="store_true", help="Download/update community YARA rule repos before scanning")
     parser.add_argument("--update-capa", action="store_true", help="Download/update capa rules before scanning")
     return parser.parse_args()
@@ -139,6 +139,7 @@ def build_settings(args) -> Settings:
         run_capa=getattr(args, "capa", False) or features_cfg.get("capa", False),
         run_yara=getattr(args, "yara", False) or features_cfg.get("yara", False),
         run_decompile=getattr(args, "decompile", None) or features_cfg.get("decompile", ""),
+        run_vt=getattr(args, "vt", False) or features_cfg.get("vt", False),
 
         # Output
 

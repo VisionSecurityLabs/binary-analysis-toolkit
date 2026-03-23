@@ -57,18 +57,29 @@ def analyze_strings(data: bytes,
     deob = deobfuscate_strings(ascii_strings or []) + deobfuscate_strings(wide_strings or [])
     all_strings += [(off, s, "deobfuscated") for off, s in deob]
 
-    findings = {}
+    # First pass: collect all findings (ignoring requires)
+    raw_findings = {}
 
     for offset, string, encoding in all_strings:
-        for pattern, category in SUSPICIOUS_STRING_PATTERNS:
-            for m in re.finditer(pattern, string, re.IGNORECASE):
+        for sp in SUSPICIOUS_STRING_PATTERNS:
+            for m in re.finditer(sp.pattern, string, re.IGNORECASE):
                 match_str = m.group()
-                findings.setdefault(category, []).append({
+                raw_findings.setdefault(sp.category, []).append({
                     "value": match_str,
                     "offset": offset,
                     "encoding": encoding,
                     "full_string": string[:200],
+                    "_requires": sp.requires,
                 })
+
+    # Second pass: enforce requires — a category with requires only
+    # appears if at least one of its required categories has findings
+    findings = {}
+    for cat, items in raw_findings.items():
+        req = items[0]["_requires"] if items else []
+        if req and not any(r in raw_findings for r in req):
+            continue
+        findings[cat] = items
 
     # Deduplicate by value within each category
     for cat in findings:

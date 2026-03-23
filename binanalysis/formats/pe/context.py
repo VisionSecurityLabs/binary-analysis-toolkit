@@ -21,6 +21,8 @@ class PEContext(AnalysisContext):
     dynamic_apis: list = field(default_factory=list)
     exports: list = field(default_factory=list)
     dotnet: dict = field(default_factory=dict)
+    is_installer: bool = False
+    is_signed: bool = False
 
     # ── PE-specific predicates ──
 

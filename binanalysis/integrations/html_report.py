@@ -46,6 +46,7 @@ a { color: #58a6ff; text-decoration: none; }
 .verdict-malicious  { background: #3d1a1a; color: #ff7b72; border: 1px solid #6e2020; }
 .verdict-suspicious { background: #2d2208; color: #e3b341; border: 1px solid #5a4320; }
 .verdict-clean      { background: #0d2117; color: #3fb950; border: 1px solid #1a4428; }
+.verdict-benign     { background: #0d2117; color: #56d364; border: 1px solid #1a4428; }
 
 .meta-grid { display: flex; flex-wrap: wrap; gap: 8px 28px; }
 .meta-item { font-size: 12px; color: #8b949e; }
@@ -181,10 +182,13 @@ def _verdict_class(verdict: str) -> str:
         return "verdict-malicious"
     if "suspicious" in v:
         return "verdict-suspicious"
+    if "benign" in v:
+        return "verdict-benign"
     return "verdict-clean"
 
 
-def _compute_verdict(behaviors: list[dict], capa: list[dict], yara: list[dict]) -> tuple[str, dict]:
+def _compute_verdict(behaviors: list[dict], capa: list[dict], yara: list[dict],
+                     legitimacy: dict | None = None) -> tuple[str, dict]:
     counts: dict[str, int] = {"critical": 0, "high": 0, "medium": 0, "low": 0}
     for b in behaviors:
         sev = b.get("severity", "low")
@@ -202,14 +206,19 @@ def _compute_verdict(behaviors: list[dict], capa: list[dict], yara: list[dict]) 
     if yara_suspicious:
         counts["medium"] += 1
 
+    # Legitimacy signals can downgrade the verdict
+    leg = legitimacy or {}
+    leg_count = sum(1 for k in ("is_installer", "signed", "known_software", "vt_clean") if leg.get(k))
+    has_strong_legitimacy = leg_count >= 2
+
     if counts.get("critical", 0) > 0:
-        verdict = "MALICIOUS"
+        verdict = "SUSPICIOUS" if has_strong_legitimacy else "MALICIOUS"
     elif counts.get("high", 0) >= 2:
-        verdict = "LIKELY MALICIOUS"
+        verdict = "SUSPICIOUS" if has_strong_legitimacy else "LIKELY MALICIOUS"
     elif counts.get("high", 0) >= 1:
-        verdict = "SUSPICIOUS"
+        verdict = "LIKELY BENIGN" if has_strong_legitimacy else "SUSPICIOUS"
     elif counts.get("medium", 0) >= 2:
-        verdict = "SUSPICIOUS"
+        verdict = "LIKELY BENIGN" if has_strong_legitimacy else "SUSPICIOUS"
     else:
         verdict = "CLEAN"
 
@@ -868,6 +877,198 @@ def _render_decompile(results: dict) -> str:
     return "".join(sections)
 
 
+def _render_legitimacy(results: dict) -> str:
+    leg: dict = results.get("legitimacy", {})
+    if not leg:
+        return ""
+
+    items = []
+    if leg.get("is_installer"):
+        items.append(("Installer Framework", leg.get("framework", "Unknown"), "#56d364"))
+    if leg.get("signed"):
+        items.append(("Digitally Signed", leg.get("signer", "Unknown"), "#56d364"))
+    if leg.get("known_software"):
+        items.append(("Known Software Path", leg["known_software"], "#56d364"))
+    if leg.get("vt_clean"):
+        items.append(("VirusTotal", f"{leg.get('vt_detection', '0/0')} detections", "#56d364"))
+
+    if not items:
+        return ""
+
+    rows = "".join(
+        f'<tr><td style="color:#8b949e;width:180px">{_e(k)}</td>'
+        f'<td class="mono" style="color:{color}">{_e(v)}</td></tr>'
+        for k, v, color in items
+    )
+
+    return f"""
+<details class="section" open>
+  <summary>
+    <span class="section-title">Legitimacy Signals</span>
+    <span style="display:flex;align-items:center;gap:8px">
+      <span class="section-badge" style="background:#0d2117;color:#3fb950">{len(items)} signals</span>
+      <span class="chevron">&#9654;</span>
+    </span>
+  </summary>
+  <div class="section-body"><table>{rows}</table></div>
+</details>
+"""
+
+
+def _render_installer(results: dict) -> str:
+    installer: dict = results.get("format_specific", {}).get("installer", {})
+    if not installer or not installer.get("is_installer"):
+        return ""
+
+    fields = [
+        ("Framework", installer.get("framework_full")),
+        ("Version", installer.get("framework_version")),
+    ]
+    rows = "".join(
+        f'<tr><td style="color:#8b949e;width:180px">{_e(k)}</td><td class="mono">{_e(v)}</td></tr>'
+        for k, v in fields if v
+    )
+
+    return f"""
+<details class="section">
+  <summary>
+    <span class="section-title">Installer Framework</span>
+    <span style="display:flex;align-items:center;gap:8px">
+      <span class="section-badge" style="background:#0d2117;color:#56d364">{_e(installer.get("framework",""))}</span>
+      <span class="chevron">&#9654;</span>
+    </span>
+  </summary>
+  <div class="section-body"><table>{rows}</table></div>
+</details>
+"""
+
+
+def _render_manifest(results: dict) -> str:
+    manifest: dict = results.get("format_specific", {}).get("manifest", {})
+    if not manifest or not manifest.get("name"):
+        return ""
+
+    fields = [
+        ("Assembly Name", manifest.get("name")),
+        ("Version", manifest.get("version")),
+        ("Description", manifest.get("description")),
+        ("Execution Level", manifest.get("execution_level")),
+        ("UI Access", manifest.get("ui_access")),
+        ("Supported OS", ", ".join(manifest.get("supported_os", []))),
+    ]
+    rows = "".join(
+        f'<tr><td style="color:#8b949e;width:180px">{_e(k)}</td><td class="mono">{_e(v)}</td></tr>'
+        for k, v in fields if v
+    )
+
+    return f"""
+<details class="section">
+  <summary>
+    <span class="section-title">PE Manifest</span>
+    <span class="chevron">&#9654;</span>
+  </summary>
+  <div class="section-body"><table>{rows}</table></div>
+</details>
+"""
+
+
+def _render_signature(results: dict) -> str:
+    sig: dict = results.get("format_specific", {}).get("signature", {})
+    if not sig or not sig.get("signed"):
+        return ""
+
+    fields = [
+        ("Signed", "Yes"),
+        ("Signer", sig.get("signer")),
+        ("Issuer", sig.get("issuer")),
+        ("Organization", sig.get("signer_organization")),
+        ("Certificate Type", sig.get("cert_type")),
+        ("Thumbprint (SHA-1)", sig.get("thumbprint")),
+    ]
+    rows = "".join(
+        f'<tr><td style="color:#8b949e;width:180px">{_e(k)}</td><td class="mono">{_e(v)}</td></tr>'
+        for k, v in fields if v
+    )
+
+    return f"""
+<details class="section">
+  <summary>
+    <span class="section-title">Digital Signature</span>
+    <span style="display:flex;align-items:center;gap:8px">
+      <span class="section-badge" style="background:#0d2117;color:#56d364">SIGNED</span>
+      <span class="chevron">&#9654;</span>
+    </span>
+  </summary>
+  <div class="section-body"><table>{rows}</table></div>
+</details>
+"""
+
+
+def _render_path_context(results: dict) -> str:
+    ctx: dict = results.get("generic", {}).get("path_context", {})
+    if not ctx or not ctx.get("known_software"):
+        return ""
+
+    fields = [
+        ("Known Software", ctx.get("known_software")),
+        ("Description", ctx.get("path_description")),
+        ("Matched Path", ctx.get("matched_path")),
+    ]
+    rows = "".join(
+        f'<tr><td style="color:#8b949e;width:180px">{_e(k)}</td><td class="mono">{_e(v)}</td></tr>'
+        for k, v in fields if v
+    )
+
+    return f"""
+<details class="section">
+  <summary>
+    <span class="section-title">File Path Context</span>
+    <span style="display:flex;align-items:center;gap:8px">
+      <span class="section-badge" style="background:#0d2117;color:#56d364">{_e(ctx.get("known_software",""))}</span>
+      <span class="chevron">&#9654;</span>
+    </span>
+  </summary>
+  <div class="section-body"><table>{rows}</table></div>
+</details>
+"""
+
+
+def _render_virustotal(results: dict) -> str:
+    vt: dict = results.get("virustotal", {})
+    if not vt or not vt.get("found"):
+        return ""
+
+    malicious = vt.get("malicious", 0)
+    ratio = vt.get("detection_ratio", "?")
+    color = "#ff7b72" if malicious > 3 else ("#e3b341" if malicious > 0 else "#56d364")
+    badge_bg = "#3d1a1a" if malicious > 3 else ("#2d2208" if malicious > 0 else "#0d2117")
+
+    fields = [
+        ("Detection Ratio", ratio),
+        ("Threat Label", vt.get("threat_label")),
+        ("Known Names", ", ".join(vt.get("known_names", []))),
+        ("VT Signer", vt.get("vt_signer")),
+        ("Tags", ", ".join(vt.get("tags", []))),
+    ]
+    rows = "".join(
+        f'<tr><td style="color:#8b949e;width:180px">{_e(k)}</td><td class="mono">{_e(v)}</td></tr>'
+        for k, v in fields if v
+    )
+
+    return f"""
+<details class="section" open>
+  <summary>
+    <span class="section-title">VirusTotal</span>
+    <span style="display:flex;align-items:center;gap:8px">
+      <span class="section-badge" style="background:{badge_bg};color:{color}">{_e(ratio)}</span>
+      <span class="chevron">&#9654;</span>
+    </span>
+  </summary>
+  <div class="section-body"><table>{rows}</table></div>
+</details>
+"""
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -878,11 +1079,18 @@ def save_html_report(results: dict, filepath: Path) -> Path:
     capa      = results.get("capa", [])
     yara      = results.get("yara", [])
 
-    verdict, counts = _compute_verdict(behaviors, capa, yara)
+    legitimacy = results.get("legitimacy", {})
+    verdict, counts = _compute_verdict(behaviors, capa, yara, legitimacy=legitimacy)
 
     body = (
         _render_header(results, filepath, verdict, counts)
+        + _render_legitimacy(results)
         + _render_findings(behaviors, capa, yara)
+        + _render_virustotal(results)
+        + _render_path_context(results)
+        + _render_installer(results)
+        + _render_manifest(results)
+        + _render_signature(results)
         + _render_pe_headers(results)
         + _render_imports(results)
         + _render_exports(results)

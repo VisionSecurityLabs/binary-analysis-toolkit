@@ -55,7 +55,7 @@ SUSPICIOUS_STRING_PATTERNS = [
         requires=["browser_path", "temp_drop_path", "driver_path", "crypto_wallet_path", "shell_command"],
     ),
     StringPattern(
-        r'%[A-Z]+%', "env_variable", 2,
+        r'%[A-Za-z_]{3,}%', "env_variable", 2,
         requires=["temp_drop_path", "shell_command", "recon_command"],
     ),
     StringPattern(
@@ -93,7 +93,8 @@ SUSPICIOUS_STRING_PATTERNS = [
     StringPattern(r'GroupKeyEnvelope|KdsCreateTime|GetAllRootKeys', "kds_rootkey", 10),
     StringPattern(r'msDS-GroupMSAMembership|msDS-ManagedPasswordInterval', "gmsa_attribute", 8),
     # Kerberos attacks (Rubeus, etc.)
-    StringPattern(r'AS-REP|TGT|TGS|kerberoast|asreproast', "kerberos_attack", 10),
+    StringPattern(r'AS-REP|(?<![A-Za-z])TGT(?![A-Za-z])|(?<![A-Za-z])TGS(?![A-Za-z])|kerberoast|asreproast', "kerberos_attack", 10,
+                  requires=["mimikatz_command", "kerberos_ticket", "ad_attribute", "dcsync_indicator"]),
     StringPattern(r'kirbi|\.kirbi|ticket.*cache', "kerberos_ticket", 8),
     # Credential dumping (Mimikatz, etc.)
     StringPattern(r'sekurlsa|lsadump|kerberos::list|privilege::debug', "mimikatz_command", 10),
@@ -117,7 +118,7 @@ SUSPICIOUS_STRING_PATTERNS = [
     # ══════════════════════════════════════════════════════════════════
     # Browser data paths
     StringPattern(r'Login Data|Web Data|Cookies|History|Local State|Bookmarks', "browser_data", 6),
-    StringPattern(r'Google\\\\Chrome|Mozilla\\\\Firefox|Microsoft\\\\Edge|BraveSoftware|Opera', "browser_path", 6),
+    StringPattern(r'Google\\\\Chrome|Mozilla\\\\Firefox|Microsoft\\\\Edge|BraveSoftware|Opera\\\\|Opera Software', "browser_path", 6),
     StringPattern(r'logins\.json|cookies\.sqlite|key[34]\.db|cert[89]\.db|signons\.sqlite', "browser_db", 6),
     StringPattern(r'profiles\.ini|places\.sqlite', "firefox_profile", 2),
     StringPattern(r'encrypted_key', "browser_masterkey", 8),
@@ -178,7 +179,7 @@ SUSPICIOUS_STRING_PATTERNS = [
     StringPattern(r'keylog|key.*log|keyboard.*hook', "keylogger_string", 6),
     StringPattern(r'screen.*capture|screenshot|desktop.*capture', "screenshot_string", 6),
     StringPattern(r'file.*manager|dir.*listing|upload.*file|download.*file', "file_manager", 4),
-    StringPattern(r'remote.*desktop|rdp|vnc', "remote_desktop", 4),
+    StringPattern(r'remote.*desktop|(?<![A-Za-z0-9_=])rdp(?![A-Za-z0-9_])|(?<![A-Za-z0-9_=])VNC(?![A-Za-z0-9_])', "remote_desktop", 4),
     StringPattern(r'SOCKS[45]|proxy.*tunnel', "proxy_tunnel", 4),
 
     # ══════════════════════════════════════════════════════════════════
@@ -209,7 +210,7 @@ SUSPICIOUS_STRING_PATTERNS = [
     StringPattern(r'\\\\\\\\[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+\\\\', "unc_path", 4),
     StringPattern(r'net\s+share|net\s+use', "network_share_command", 4),
     StringPattern(
-        r'IPC\$|ADMIN\$|C\$', "admin_share", 4,
+        r'\\\\IPC\$|\\\\ADMIN\$|\\\\C\$', "admin_share", 4,
         requires=["network_share_command", "network_enumeration", "unc_path"],
     ),
     StringPattern(r'NetShareEnum|NetServerEnum|WNetOpenEnum', "network_enumeration", 6),
@@ -244,8 +245,11 @@ SUSPICIOUS_STRING_PATTERNS = [
     # WIPER / DESTRUCTIVE
     # ══════════════════════════════════════════════════════════════════
     StringPattern(r'\\\\.\\\\PhysicalDrive', "physical_drive_access", 8),
-    StringPattern(r'MBR|Master Boot Record|\\\\MBR', "mbr_reference", 6),
-    StringPattern(r'InitiateSystemShutdown|ExitWindowsEx|NtShutdownSystem', "forced_shutdown", 4),
+    StringPattern(r'(?<![A-Za-z])MBR(?![A-Za-z])|Master Boot Record|\\\\MBR', "mbr_reference", 6,
+                  requires=["physical_drive_access", "format_drive", "secure_overwrite"]),
+    StringPattern(r'InitiateSystemShutdown|ExitWindowsEx|NtShutdownSystem', "forced_shutdown", 4,
+                  requires=["shadow_copy_delete", "disable_recovery", "mass_delete_command", "ransom_note",
+                            "physical_drive_access", "format_drive", "secure_overwrite"]),
     StringPattern(r'FORMAT\s+[A-Z]:', "format_drive", 6),
     StringPattern(r'del\s+/[sf]|rmdir\s+/[sq]|Remove-Item.*-Recurse', "mass_delete_command", 8),
     StringPattern(r'cipher\s+/w:', "secure_overwrite", 8),

@@ -27,6 +27,12 @@ entrust.net
 mozilla.org
 mozilla.com
 
+# Build tools / open-source hosting
+sf.net
+sourceforge.net
+github.com
+gitlab.com
+
 # XML / schema hosts
 w3.org
 xml.org

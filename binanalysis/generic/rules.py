@@ -1,7 +1,35 @@
 """Generic behavioral rules — format-agnostic, work on any binary.
 Only entropy-based and string-based checks belong here."""
 
+from pathlib import Path
+
 from binanalysis.rules import Rule
+
+_DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
+
+
+def _load_benign_domains() -> set[str]:
+    path = _DATA_DIR / "benign_domains.txt"
+    if not path.exists():
+        return set()
+    return {line.strip().lower() for line in path.read_text().splitlines()
+            if line.strip() and not line.strip().startswith("#")}
+
+
+_BENIGN_DOMAINS = _load_benign_domains()
+
+
+def _has_non_benign_urls(ctx) -> bool:
+    """Return True only if there are URLs pointing to domains other than known-benign infrastructure."""
+    urls = ctx.string_findings.get("url", [])
+    if not urls:
+        return False
+    for item in urls:
+        url = item["value"].lower()
+        if not any(d in url for d in _BENIGN_DOMAINS):
+            return True
+    return False
+
 
 GENERIC_RULES: list[Rule] = [
     Rule("rwx_section", "evasion", "high",
@@ -14,8 +42,8 @@ GENERIC_RULES: list[Rule] = [
          lambda ctx: ctx.any_section(lambda s: s.get("entropy", 0) > 7.0)),
 
     Rule("embedded_urls", "network", "medium",
-         "Contains embedded URLs",
-         lambda ctx: ctx.has_finding("url")),
+         "Contains embedded URLs (non-infrastructure)",
+         _has_non_benign_urls),
 
     Rule("recon_commands", "discovery", "medium",
          "Contains reconnaissance commands (whoami, systeminfo, etc.)",
