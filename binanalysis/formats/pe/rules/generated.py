@@ -1,7 +1,7 @@
 """Auto-generated behavioral rules from enrichment pipeline.
 
 Review these rules before committing. Generated from corpus analysis
-of 173 samples.
+of 240 samples.
 """
 
 from binanalysis.rules import Rule
