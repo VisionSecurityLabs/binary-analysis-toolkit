@@ -159,4 +159,93 @@ SPECIMEN_RULES: list[Rule] = [
          lambda ctx: (hasattr(ctx, 'flat_imports')
                       and sum(1 for f in ("sin", "cos", "tan", "pow", "sqrt", "exp", "log", "acos", "asin", "atan")
                               if f in ctx.flat_imports) >= 6)),
+
+    # ── Process hollowing ──
+    Rule("process_hollowing", "injection", "critical",
+         "Contains process hollowing primitives (NtUnmapViewOfSection / ZwUnmapViewOfSection)",
+         lambda ctx: ctx.has_finding("process_hollowing_string")),
+
+    # ── RAT surveillance capabilities ──
+    Rule("webcam_surveillance", "collection", "high",
+         "Webcam access / video capture capability",
+         lambda ctx: ctx.has_finding("webcam_access")),
+
+    Rule("keylogger_capability", "collection", "high",
+         "Keylogger / keyboard hook capability",
+         lambda ctx: ctx.has_finding("keylogger_string")),
+
+    Rule("screenshot_capability", "collection", "high",
+         "Screenshot / desktop capture capability",
+         lambda ctx: ctx.has_finding("screenshot_string")),
+
+    Rule("audio_surveillance", "collection", "medium",
+         "Microphone / audio recording capability combined with other surveillance",
+         lambda ctx: (ctx.has_finding("audio_record")
+                      and (ctx.has_finding("webcam_access")
+                           or ctx.has_finding("keylogger_string")
+                           or ctx.has_finding("screenshot_string")))),
+
+    # ── Stealer indicators ──
+    Rule("browser_credential_theft", "credential_theft", "high",
+         "Targets browser credential databases (Login Data, cookies.sqlite, key3.db)",
+         lambda ctx: ctx.has_finding("browser_db")),
+
+    Rule("browser_masterkey_theft", "credential_theft", "critical",
+         "Extracts browser encrypted_key — can decrypt all saved passwords",
+         lambda ctx: (ctx.has_finding("browser_masterkey")
+                      and (ctx.has_finding("browser_data")
+                           or ctx.has_finding("browser_path")))),
+
+    Rule("crypto_wallet_theft", "credential_theft", "high",
+         "Targets cryptocurrency wallet files (Electrum, Exodus, Metamask, etc.)",
+         lambda ctx: ctx.has_finding("crypto_wallet")),
+
+    Rule("ntlm_credential_strings", "credential_theft", "high",
+         "Contains NTLM hash / credential references combined with attack tooling",
+         lambda ctx: (ctx.has_finding("ntlm_hash")
+                      and (ctx.has_finding("mimikatz_command")
+                           or ctx.has_finding("dcsync_indicator")
+                           or ctx.has_finding("kerberos_attack")
+                           or ctx.has_finding("ad_attribute")
+                           or ctx.has_finding("ldap_query")))),
+
+    # ── Banking trojan indicators ──
+    Rule("http_api_hooking", "credential_theft", "high",
+         "Hooks HTTP send APIs (HttpSendRequest) — intercepts web traffic",
+         lambda ctx: ctx.has_finding("http_intercept")),
+
+    Rule("browser_api_hooking", "credential_theft", "high",
+         "Browser API hooking (InternetSetStatusCallback / HttpAddRequestHeaders)",
+         lambda ctx: ctx.has_finding("browser_hook")),
+
+    Rule("banking_trojan", "credential_theft", "critical",
+         "Banking trojan — targets financial sites combined with browser/form hooking",
+         lambda ctx: (ctx.has_finding("banking_target")
+                      and (ctx.has_finding("browser_hook")
+                           or ctx.has_finding("http_intercept")
+                           or ctx.has_finding("webinject_config")))),
+
+    # ── Ransomware indicators ──
+    Rule("ransomware_extension", "impact", "critical",
+         "Appends ransomware-style file extensions (.encrypted, .locked, .crypt)",
+         lambda ctx: (ctx.has_finding("ransom_extension")
+                      and (ctx.has_finding("ransom_note")
+                           or ctx.has_finding("ransom_note_filename")
+                           or ctx.has_finding("shadow_copy_delete")
+                           or ctx.has_finding("disable_recovery")
+                           or ctx.has_finding("delete_backup_catalog")
+                           or ctx.has_finding("ransom_payment")))),
+
+    # ── Propagation / spreading ──
+    Rule("email_spreading", "lateral_movement", "high",
+         "Contains SMTP / email worm spreading capability (multiple SMTP indicators)",
+         lambda ctx: ctx.finding_count("email_worm") >= 3),
+
+    # ── Network evasion ──
+    Rule("proxy_tunnel", "command_and_control", "medium",
+         "Proxy / tunneling capability for C2 communication",
+         lambda ctx: (ctx.has_finding("proxy_tunnel")
+                      and (ctx.has_finding("reverse_shell")
+                           or ctx.has_finding("named_pipe")
+                           or ctx.has_finding("remote_desktop")))),
 ]

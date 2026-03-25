@@ -30,5 +30,8 @@ class AnalysisContext:
     def has_finding(self, category: str) -> bool:
         return bool(self.string_findings.get(category))
 
+    def finding_count(self, category: str) -> int:
+        return len(self.string_findings.get(category, []))
+
     def any_section(self, predicate) -> bool:
         return any(predicate(s) for s in self.sections)
