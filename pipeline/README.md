@@ -44,101 +44,76 @@ flowchart TD
 
     Stage1 --> Stage2 --> Stage3 --> Stage4 --> Stage5
     Stage5 -.->|"re-run to verify\nimproved coverage"| Stage2
-
-    subgraph Config["Configuration"]
-        E1[".env — API keys\nBAZAAR_AUTH_KEY\nMALSHARE_API_KEY\nVT_API_KEY"]
-        E2[".env.sample — template"]
-        E3["Env overrides\nSAMPLES_DIR\nBATCH_WORKERS"]
-    end
-
-    Config -.-> Stage1
-    Config -.-> Stage2
 ```
 
-## Quick Start (full pipeline)
+## Quick Start
 
 ```bash
 cp .env.sample .env
-# Edit .env and set BAZAAR_AUTH_KEY
+# Set BAZAAR_AUTH_KEY
 
-# Run everything: collect → analyze → aggregate → generate → validate
 uv run python pipeline/run.py --tags AgentTesla --limit 50 --clean-dir clean_samples/
-
-# Multiple families with capa + YARA
 uv run python pipeline/run.py --tags Emotet Remcos AgentTesla --limit 100 --workers 4 --capa --yara --clean-dir clean_samples/
-
-# Preview generated rules without writing
 uv run python pipeline/run.py --tags AgentTesla --limit 50 --dry-run
-
-# Re-analyze existing samples (skip download)
 uv run python pipeline/run.py --skip-collect --samples samples/
-
-# Only re-aggregate and regenerate (skip download + analysis)
 uv run python pipeline/run.py --skip-collect --skip-analyze --samples samples/
 ```
 
-## Setup
+Use this pipeline when you are improving detection coverage, not for live alert triage. For active incident handling, use [../docs/guide.md](../docs/guide.md).
 
-```bash
-cp .env.sample .env
-# Edit .env and set BAZAAR_AUTH_KEY (required)
-```
+## Stages
 
-## Run
-
-### Stage 1 — Collect Samples
+### 1. Collect
 
 ```bash
 uv run python pipeline/collect_samples.py --tag AgentTesla --limit 50
 uv run python pipeline/collect_samples.py --tag Emotet Remcos --limit 100 --out samples/
 ```
 
-### Stage 2 — Batch Analyze
+### 2. Analyze
 
 ```bash
 uv run python pipeline/batch_analyze.py --samples samples/ --workers 4
 uv run python pipeline/batch_analyze.py --samples samples/ --workers 2 --capa --yara
 ```
 
-### Stage 3 — Aggregate Results
+### 3. Aggregate
 
 ```bash
 uv run python pipeline/aggregate_results.py --reports samples/ --output enrichment_report.json
 ```
 
-### Stage 4 — Generate Rules
+### 4. Generate
 
 ```bash
-# Preview what would be generated
 uv run python pipeline/generate_rules.py --report enrichment_report.json --dry-run
-
-# Generate rule files (auto-loaded by binanalysis on next run)
 uv run python pipeline/generate_rules.py --report enrichment_report.json
-
-# Adjust minimum prevalence threshold (default: 20%)
 uv run python pipeline/generate_rules.py --report enrichment_report.json --min-pct 15
 ```
 
-Generated files are auto-loaded by the engine when present:
-- `binanalysis/formats/pe/rules/generated.py` — behavioral rules
-- `binanalysis/formats/pe/rules/generated_specimen.py` — family-specific rules
-- `binanalysis/generated_patterns.py` — string patterns
-- `binanalysis/generated_ioc.py` — IOC extractors
+Generated files:
 
-### Stage 5 — Validate Against Clean Files
+- `binanalysis/formats/pe/rules/generated.py`
+- `binanalysis/formats/pe/rules/generated_specimen.py`
+- `binanalysis/generated_patterns.py`
+- `binanalysis/generated_ioc.py`
+
+### 5. Validate
 
 ```bash
-# Fetch clean PEs (SysInternals + NirSoft) — only needed once
 uv run python pipeline/fetch_clean_samples.py --out clean_samples/
-
-# Validate and auto-remove false positive rules
 uv run python pipeline/validate_rules.py --clean-dir clean_samples/
-
-# Report only (don't remove rules)
 uv run python pipeline/validate_rules.py --clean-dir clean_samples/ --report-only
 ```
 
-If `--clean-dir` is empty when running `run.py`, clean samples are fetched automatically.
-Any generated rule that fires on a clean file is automatically removed.
+If `run.py` gets an empty `--clean-dir`, it fetches clean samples automatically. Rules that fire on clean files are removed.
 
-Re-run Stage 2 + 3 after validating to verify improved coverage.
+## Config
+
+Use `.env` for API keys and overrides such as:
+
+- `BAZAAR_AUTH_KEY`
+- `MALSHARE_API_KEY`
+- `VT_API_KEY`
+- `SAMPLES_DIR`
+- `BATCH_WORKERS`
