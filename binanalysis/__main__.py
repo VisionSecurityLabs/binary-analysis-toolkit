@@ -2,6 +2,7 @@
 
 import sys
 import json
+import shutil
 from pathlib import Path
 
 from binanalysis.output import C, heading, subheading, info, warn, danger, detail
@@ -22,7 +23,7 @@ import binanalysis.formats.pe  # noqa: F401
 
 from binanalysis.integrations.capa_runner import run_capa_analysis, update_capa_rules
 from binanalysis.integrations.yara_runner import run_yara_scan, download_community_rules
-from binanalysis.integrations.decompiler import run_decompilation
+from binanalysis.integrations.decompiler import run_decompilation, GHIDRA_HEADLESS, HAS_R2
 
 
 def classify(behaviors: list[dict], capa_results: list[dict], yara_results: list[dict],
@@ -158,6 +159,21 @@ def main():
     print("║            STATIC BINARY ANALYZER — Vision Security Labs             ║")
     print("╚══════════════════════════════════════════════════════════════════════╝")
     print(C.RESET)
+
+    # Tool availability warnings — shown once at startup so analysts know what's missing
+    missing = []
+    if not GHIDRA_HEADLESS.exists():
+        missing.append(f"  {C.YELLOW}[WARN]{C.RESET} Ghidra not found ({GHIDRA_HEADLESS})"
+                       f" — decompilation unavailable. Install: see README § Optional external tools")
+    if not HAS_R2:
+        missing.append(f"  {C.YELLOW}[WARN]{C.RESET} r2pipe not installed"
+                       " — radare2 pseudocode unavailable. Install: uv add r2pipe")
+    if not shutil.which("capa"):
+        missing.append(f"  {C.YELLOW}[WARN]{C.RESET} capa not found"
+                       " — capability detection unavailable. Install: pip install capa")
+    if missing:
+        print("\n".join(missing))
+        print()
 
     # Pre-extract strings
     ascii_raw = extract_ascii_strings(data, min_len=4)

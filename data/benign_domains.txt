@@ -32,6 +32,7 @@ sf.net
 sourceforge.net
 github.com
 gitlab.com
+ip-api.com
 
 # XML / schema hosts
 w3.org

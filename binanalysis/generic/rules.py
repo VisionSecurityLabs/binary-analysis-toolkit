@@ -17,6 +17,28 @@ def _load_benign_domains() -> set[str]:
 
 
 _BENIGN_DOMAINS = _load_benign_domains()
+_GEOLOCATION_DOMAINS = {
+    "ip-api.com",
+    "ipinfo.io",
+    "ipify.org",
+    "ifconfig.me",
+}
+
+
+def _has_domain_or_url(ctx, domains: set[str]) -> bool:
+    domain_findings = ctx.string_findings.get("domain", [])
+    for item in domain_findings:
+        value = item["value"].lower()
+        if any(value == d or value.endswith("." + d) for d in domains):
+            return True
+
+    url_findings = ctx.string_findings.get("url", [])
+    for item in url_findings:
+        value = item["value"].lower()
+        if any(d in value for d in domains):
+            return True
+
+    return False
 
 
 def _has_non_benign_urls(ctx) -> bool:
@@ -44,6 +66,10 @@ GENERIC_RULES: list[Rule] = [
     Rule("embedded_urls", "network", "medium",
          "Contains embedded URLs (non-infrastructure)",
          _has_non_benign_urls),
+
+    Rule("geolocation_service_usage", "discovery", "low",
+         "References public IP geolocation or IP-discovery services",
+         lambda ctx: _has_domain_or_url(ctx, _GEOLOCATION_DOMAINS)),
 
     Rule("recon_commands", "discovery", "medium",
          "Contains reconnaissance commands (whoami, systeminfo, etc.)",

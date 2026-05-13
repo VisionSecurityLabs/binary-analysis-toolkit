@@ -1,4 +1,5 @@
 .DS_Store
+.claude/
 # Python-generated files
 __pycache__/
 *.py[oc]
@@ -16,6 +17,7 @@ results/
 
 # Pipeline — downloaded malware samples
 samples/
+samples2/
 clean_samples/
 *.exe
 enrichment_report.json

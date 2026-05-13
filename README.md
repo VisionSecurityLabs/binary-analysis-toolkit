@@ -81,6 +81,33 @@ uv sync
 | `ghidra` | Headless decompilation with suspicious-function filtering |
 | `ilspycmd` | .NET IL decompilation |
 
+Install commands:
+
+```bash
+# upx
+sudo apt-get install upx          # Debian/Ubuntu
+brew install upx                  # macOS
+
+# radare2 + r2pipe Python binding
+sudo apt-get install radare2      # Debian/Ubuntu
+brew install radare2              # macOS
+uv add r2pipe                     # Python binding (required for --decompile r2)
+
+# Ghidra (headless decompilation — biggest impact on analysis quality)
+# Download the latest release zip from:
+#   https://github.com/NationalSecurityAgency/ghidra/releases
+# Then install:
+unzip ghidra_*.zip -d ~/tools/
+export GHIDRA_HEADLESS=~/tools/ghidra_*/support/analyzeHeadless
+# Add to ~/.bashrc or ~/.zshrc to persist
+
+# Verify Ghidra is found:
+$GHIDRA_HEADLESS --help 2>&1 | head -1
+
+# ilspycmd (.NET decompilation)
+dotnet tool install -g ilspycmd
+```
+
 ### Rules
 
 - `--capa` downloads capa rules to `~/.local/share/binanalysis/capa-rules`

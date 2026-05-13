@@ -54,6 +54,8 @@ cp .env.sample .env
 
 uv run python pipeline/run.py --tags AgentTesla --limit 50 --clean-dir clean_samples/
 uv run python pipeline/run.py --tags Emotet Remcos AgentTesla --limit 100 --workers 4 --capa --yara --clean-dir clean_samples/
+uv run python pipeline/run.py --filetypes exe dll --limit 100
+uv run python pipeline/run.py --filetypes exe --download-timeout 300 --query-timeout 90
 uv run python pipeline/run.py --tags AgentTesla --limit 50 --dry-run
 uv run python pipeline/run.py --skip-collect --samples samples/
 uv run python pipeline/run.py --skip-collect --skip-analyze --samples samples/
@@ -68,6 +70,8 @@ Use this pipeline when you are improving detection coverage, not for live alert 
 ```bash
 uv run python pipeline/collect_samples.py --tag AgentTesla --limit 50
 uv run python pipeline/collect_samples.py --tag Emotet Remcos --limit 100 --out samples/
+uv run python pipeline/collect_samples.py --filetype exe dll --limit 100 --out samples/
+uv run python pipeline/collect_samples.py --filetype exe --limit 100 --download-timeout 300 --query-timeout 90
 ```
 
 ### 2. Analyze
@@ -113,6 +117,8 @@ If `run.py` gets an empty `--clean-dir`, it fetches clean samples automatically.
 Use `.env` for API keys and overrides such as:
 
 - `BAZAAR_AUTH_KEY`
+- `BAZAAR_QUERY_TIMEOUT`
+- `BAZAAR_DOWNLOAD_TIMEOUT`
 - `MALSHARE_API_KEY`
 - `VT_API_KEY`
 - `SAMPLES_DIR`

@@ -2,7 +2,7 @@
 Run the full malware collection and detection enrichment pipeline.
 
 Orchestrates all 5 stages:
-  1. Collect samples from MalwareBazaar by tag
+  1. Collect samples from MalwareBazaar by tag or file type
   2. Batch-analyze samples with binanalysis
   3. Aggregate results into an enrichment report
   4. Auto-generate detection rules from the report
@@ -11,6 +11,7 @@ Orchestrates all 5 stages:
 Usage:
     uv run python pipeline/run.py --tags AgentTesla --limit 50
     uv run python pipeline/run.py --tags Emotet Remcos --limit 100 --workers 4 --capa --yara
+    uv run python pipeline/run.py --filetypes exe dll --limit 100
     uv run python pipeline/run.py --skip-collect --samples samples/  # re-run from analysis
     uv run python pipeline/run.py --tags AgentTesla --dry-run        # preview generated rules
     uv run python pipeline/run.py --tags AgentTesla --clean-dir clean_samples/  # with FP validation
@@ -24,18 +25,39 @@ import sys
 from pathlib import Path
 
 
+def has_sample_files(samples_dir: Path) -> bool:
+    if not samples_dir.is_dir():
+        return False
+    for path in samples_dir.iterdir():
+        if not path.is_file():
+            continue
+        if path.name in {"family_manifest.json", "batch_summary.json"}:
+            continue
+        if path.name.endswith(("_analysis.json", "_analysis.html")):
+            continue
+        if len(path.stem) == 64:
+            return True
+    return False
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Run the full malware collection and detection enrichment pipeline",
     )
 
     # Stage 1 — Collect
-    parser.add_argument("--tags", nargs="+", default=["AgentTesla"], metavar="TAG",
-                        help="Malware tag(s) to query (default: AgentTesla)")
+    parser.add_argument("--tags", nargs="+", default=[], metavar="TAG",
+                        help="Malware tag(s) to query")
+    parser.add_argument("--filetypes", nargs="+", default=[], metavar="TYPE",
+                        help="MalwareBazaar file type(s) to query, e.g. exe dll elf")
     parser.add_argument("--limit", type=int, default=50,
-                        help="Max samples per tag (default: 50)")
+                        help="Max samples per query value (default: 50)")
     parser.add_argument("--samples", type=Path, default=Path(os.getenv("SAMPLES_DIR", "samples")),
                         help="Samples directory (default: $SAMPLES_DIR or samples/)")
+    parser.add_argument("--query-timeout", type=int, default=int(os.getenv("BAZAAR_QUERY_TIMEOUT", "60")),
+                        help="MalwareBazaar metadata query timeout in seconds (default: 60)")
+    parser.add_argument("--download-timeout", type=int, default=int(os.getenv("BAZAAR_DOWNLOAD_TIMEOUT", "180")),
+                        help="MalwareBazaar sample download timeout in seconds (default: 180)")
 
     # Stage 2 — Analyze
     parser.add_argument("--workers", type=int, default=int(os.getenv("BATCH_WORKERS", "2")),
@@ -64,6 +86,9 @@ def main():
                         help="Skip Stage 4 (only collect, analyze, aggregate)")
 
     args = parser.parse_args()
+    if not args.tags and not args.filetypes:
+        args.tags = ["AgentTesla"]
+
     report_path = Path("enrichment_report.json")
 
     # ── Stage 1: Collect ──────────────────────────────────────────────────
@@ -72,8 +97,15 @@ def main():
         print(f"  STAGE 1 — Collect Samples")
         print(f"{'='*60}")
         from pipeline.collect_samples import collect
-        collected = collect(args.tags, args.limit, args.samples)
-        if not collected and not list(args.samples.glob("*.exe")):
+        collected = collect(
+            args.tags,
+            args.filetypes,
+            args.limit,
+            args.samples,
+            args.query_timeout,
+            args.download_timeout,
+        )
+        if not collected and not has_sample_files(args.samples):
             print("[!] No samples collected and no existing samples found. Aborting.")
             sys.exit(1)
     else:

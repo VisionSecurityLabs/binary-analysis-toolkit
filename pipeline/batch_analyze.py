@@ -23,6 +23,20 @@ from pathlib import Path
 TIMEOUT_SECONDS = 300  # 5 min per sample (capa can be slow)
 
 
+def discover_sample_files(samples_dir: Path) -> list[Path]:
+    files = []
+    for path in samples_dir.iterdir():
+        if not path.is_file():
+            continue
+        if path.name in {"family_manifest.json", "batch_summary.json"}:
+            continue
+        if path.name.endswith(("_analysis.json", "_analysis.html")):
+            continue
+        if len(path.stem) == 64:
+            files.append(path)
+    return sorted(files)
+
+
 def analyze_one(args: tuple[Path, bool, bool]) -> dict:
     """Worker: run binanalysis on a single file. Returns a result record."""
     filepath, run_capa, run_yara = args
@@ -72,12 +86,9 @@ def analyze_one(args: tuple[Path, bool, bool]) -> dict:
 
 
 def batch_analyze(samples_dir: Path, workers: int, run_capa: bool, run_yara: bool) -> list[dict]:
-    pe_files = [
-        f for f in samples_dir.glob("*.exe")
-        if not f.name.endswith("_analysis.json")
-    ]
+    pe_files = discover_sample_files(samples_dir)
     if not pe_files:
-        print(f"[!] No .exe files found in {samples_dir}")
+        print(f"[!] No sample files found in {samples_dir}")
         return []
 
     print(f"[*] Analyzing {len(pe_files)} samples with {workers} workers")
